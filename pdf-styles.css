@@ -1,0 +1,54 @@
+/* ملف الأنماط لتحسين عرض النصوص العربية في PDF */
+
+@font-face {
+    font-family: 'ArabicFont';
+    src: url('https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap');
+    font-display: swap;
+}
+
+/* تحسين عرض النصوص العربية */
+.arabic-text {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: right;
+    unicode-bidi: bidi-override;
+}
+
+/* تحسين عرض الجداول العربية */
+.arabic-table {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: center;
+}
+
+/* تحسين عرض الأرقام العربية */
+.arabic-numbers {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    direction: ltr;
+    text-align: center;
+}
+
+/* تحسين عرض التواريخ العربية */
+.arabic-date {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: center;
+}
+
+/* تحسين عرض العناوين العربية */
+.arabic-title {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    font-weight: bold;
+    direction: rtl;
+    text-align: center;
+    font-size: 1.2em;
+}
+
+/* تحسين عرض التذييل العربي */
+.arabic-footer {
+    font-family: 'Amiri', 'Arial', sans-serif;
+    direction: rtl;
+    text-align: center;
+    font-size: 0.9em;
+    color: #666;
+}

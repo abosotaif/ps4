@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>إدارة صالة الألعاب - PlayStation 4</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.plugin.standard_fonts_metrics.min.js"></script>
+</head>
+<body>
+    <!-- شاشة تسجيل الدخول -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-container">
+            <div class="login-header">
+                <i class="fas fa-gamepad"></i>
+                <h1>إدارة صالة الألعاب</h1>
+                <p>PlayStation 4 Gaming Center</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="username">اسم المستخدم:</label>
+                    <input type="text" id="username" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">كلمة المرور:</label>
+                    <input type="password" id="password" required>
+                </div>
+                <button type="submit" class="login-btn">
+                    <i class="fas fa-sign-in-alt"></i>
+                    تسجيل الدخول
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- الشاشة الرئيسية -->
+    <div id="mainScreen" class="main-screen hidden">
+        <!-- شريط التنقل -->
+        <nav class="navbar">
+            <div class="nav-brand">
+                <i class="fas fa-gamepad"></i>
+                <span>إدارة صالة الألعاب</span>
+            </div>
+            <div class="nav-controls">
+                <button id="themeToggleBtn" class="btn btn-theme" title="تبديل الثيم">
+                    <i class="fas fa-moon"></i>
+                </button>
+                <button id="addSessionBtn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i>
+                    بدء جلسة جديدة
+                </button>
+                <button id="viewReportsBtn" class="btn btn-secondary">
+                    <i class="fas fa-chart-bar"></i>
+                    التقارير
+                </button>
+                <button id="logoutBtn" class="btn btn-danger">
+                    <i class="fas fa-sign-out-alt"></i>
+                    تسجيل الخروج
+                </button>
+            </div>
+        </nav>
+
+        <!-- لوحة الأجهزة -->
+        <div class="devices-container">
+            <h2>أجهزة PlayStation 4</h2>
+            <div class="devices-grid" id="devicesGrid">
+                <!-- سيتم إنشاء الأجهزة ديناميكياً -->
+            </div>
+        </div>
+
+        <!-- إحصائيات سريعة -->
+        <div class="stats-container">
+            <div class="stat-card">
+                <i class="fas fa-play"></i>
+                <div class="stat-info">
+                    <h3 id="activeSessions">0</h3>
+                    <p>جلسات نشطة</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-clock"></i>
+                <div class="stat-info">
+                    <h3 id="totalTime">0</h3>
+                    <p>إجمالي الوقت (دقيقة)</p>
+                </div>
+            </div>
+            <div class="stat-card">
+                <i class="fas fa-money-bill-wave"></i>
+                <div class="stat-info">
+                    <h3 id="totalRevenue">0</h3>
+                    <p>إجمالي الإيرادات (ل.س)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة بدء الجلسة -->
+    <div id="sessionModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>بدء جلسة جديدة</h3>
+                <button class="close-btn" id="closeSessionModal">&times;</button>
+            </div>
+            <form id="sessionForm">
+                <div class="form-group">
+                    <label for="deviceSelect">اختر الجهاز:</label>
+                    <select id="deviceSelect" required>
+                        <option value="">-- اختر الجهاز --</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="playerName">اسم اللاعب:</label>
+                    <input type="text" id="playerName" required>
+                </div>
+                <div class="form-group">
+                    <label for="sessionType">نوع الجلسة:</label>
+                    <select id="sessionType" required>
+                        <option value="">-- اختر نوع الجلسة --</option>
+                        <option value="unlimited">وقت مفتوح</option>
+                        <option value="limited">وقت محدد</option>
+                    </select>
+                </div>
+                <div class="form-group" id="timeLimitGroup" style="display: none;">
+                    <label for="timeLimit">مدة اللعب (دقيقة):</label>
+                    <input type="number" id="timeLimit" min="1" max="480">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelSession">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">بدء الجلسة</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- نافذة انتهاء الوقت -->
+    <div id="timeUpModal" class="modal">
+        <div class="modal-content time-up-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> انتهاء الوقت</h3>
+            </div>
+            <div class="time-up-content">
+                <p>انتهى وقت اللعب على الجهاز <span id="timeUpDevice"></span></p>
+                <div class="time-up-actions">
+                    <button class="btn btn-danger" id="stopSession">
+                        <i class="fas fa-stop"></i>
+                        إيقاف الجلسة
+                    </button>
+                    <button class="btn btn-warning" id="extendTime">
+                        <i class="fas fa-clock"></i>
+                        تمديد الوقت
+                    </button>
+                    <button class="btn btn-success" id="switchToUnlimited">
+                        <i class="fas fa-infinity"></i>
+                        التحويل لوقت مفتوح
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة التقارير -->
+    <div id="reportsModal" class="modal">
+        <div class="modal-content reports-modal">
+            <div class="modal-header">
+                <h3>التقارير والإحصائيات</h3>
+                <button class="close-btn" id="closeReportsModal">&times;</button>
+            </div>
+            <div class="reports-content">
+                <div class="report-filters">
+                    <label for="reportDate">التاريخ:</label>
+                    <input type="date" id="reportDate">
+                    <button class="btn btn-primary" id="generateReport">توليد التقرير</button>
+                    <button class="btn btn-success" id="exportPDF" style="display: none;">
+                        <i class="fas fa-file-pdf"></i>
+                        تصدير PDF
+                    </button>
+                </div>
+                <div class="report-results" id="reportResults">
+                    <!-- سيتم ملء النتائج هنا -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script_new.js"></script>
+</body>
+</html>
