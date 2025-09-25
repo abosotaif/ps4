@@ -563,6 +563,90 @@ body {
     animation: pulse 2s infinite;
 }
 
+/* أنماط العدادات */
+.elapsed-time, .time-remaining {
+    font-family: 'Courier New', monospace;
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: rgba(102, 126, 234, 0.1);
+    color: #667eea;
+    transition: all 0.3s ease;
+}
+
+.time-remaining {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+}
+
+.time-remaining.warning {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.time-remaining.danger {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+}
+
+/* تحسينات نافذة انتهاء الوقت */
+.time-up-modal .modal-content {
+    border: 3px solid #dc3545;
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.time-up-modal .modal-header {
+    background: linear-gradient(135deg, #dc3545, #c82333);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    margin: -30px -30px 20px -30px;
+    padding: 20px 30px;
+}
+
+.time-up-modal .modal-header h3 {
+    color: white;
+    margin: 0;
+}
+
+.time-up-modal .time-up-content {
+    text-align: center;
+    padding: 20px 0;
+}
+
+.time-up-modal .time-up-content p {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: #dc3545;
+    margin-bottom: 30px;
+}
+
+.time-up-modal .time-up-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+.time-up-modal .time-up-actions .btn {
+    min-width: 160px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.time-up-modal .time-up-actions .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+}
+
 /* زر تبديل الثيم */
 .btn-theme {
     background: #6c757d;
@@ -831,4 +915,385 @@ body {
 [data-theme="dark"] .sessions-table td {
     border-color: var(--border-color);
     color: var(--text-primary);
+}
+
+/* أنماط الإدارة */
+.devices-modal {
+    max-width: 900px;
+}
+
+.devices-content {
+    padding: 20px;
+}
+
+/* أنماط قسم إدارة الأسعار */
+.pricing-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+}
+
+.pricing-section h4 {
+    margin-bottom: 20px;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pricing-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.pricing-controls .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pricing-controls .form-group label {
+    font-weight: 600;
+    color: #495057;
+}
+
+.pricing-controls .form-group input {
+    padding: 10px 15px;
+    border: 2px solid #e1e5e9;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.pricing-controls .form-group input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.pricing-controls .form-group button {
+    align-self: flex-start;
+    padding: 8px 16px;
+    font-size: 0.9rem;
+}
+
+/* تحسينات للثيم الليلي */
+[data-theme="dark"] .pricing-section {
+    background: #2d3748;
+    border-color: #4a5568;
+}
+
+[data-theme="dark"] .pricing-section h4 {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .pricing-controls .form-group label {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .pricing-controls .form-group input {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .pricing-controls .form-group input:focus {
+    border-color: #667eea;
+}
+
+/* تصميم متجاوب */
+@media (max-width: 768px) {
+    .pricing-controls {
+        grid-template-columns: 1fr;
+    }
+    
+    .pricing-controls .form-group {
+        flex-direction: column;
+    }
+}
+
+/* أنماط قسم مسح التقارير */
+.clear-reports-section {
+    margin-top: 30px;
+    padding: 20px;
+    background: #fff5f5;
+    border-radius: 10px;
+    border: 1px solid #fed7d7;
+}
+
+.clear-reports-section h4 {
+    margin-bottom: 15px;
+    color: #c53030;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.warning-text {
+    background: #fed7d7;
+    color: #c53030;
+    padding: 15px;
+    border-radius: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: 600;
+}
+
+.clear-reports-controls {
+    text-align: center;
+}
+
+/* أنماط نافذة تأكيد مسح التقارير */
+.clear-reports-modal {
+    max-width: 500px;
+}
+
+.clear-reports-content {
+    padding: 20px 0;
+}
+
+.warning-message {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #fed7d7;
+    border-radius: 10px;
+    border: 2px solid #fc8181;
+}
+
+.warning-message i {
+    font-size: 3rem;
+    color: #e53e3e;
+    margin-bottom: 15px;
+}
+
+.warning-message h4 {
+    color: #c53030;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
+}
+
+.warning-message p {
+    color: #c53030;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.password-confirmation {
+    margin-bottom: 30px;
+}
+
+.password-confirmation label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.password-confirmation input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.password-confirmation input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.clear-reports-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.clear-reports-actions .btn {
+    min-width: 120px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* تحسينات للثيم الليلي */
+[data-theme="dark"] .clear-reports-section {
+    background: #2d1b1b;
+    border-color: #4a1a1a;
+}
+
+[data-theme="dark"] .clear-reports-section h4 {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .warning-text {
+    background: #4a1a1a;
+    color: #fc8181;
+}
+
+[data-theme="dark"] .warning-message {
+    background: #4a1a1a;
+    border-color: #fc8181;
+}
+
+[data-theme="dark"] .warning-message h4 {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .warning-message p {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .password-confirmation label {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .password-confirmation input {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .password-confirmation input:focus {
+    border-color: #667eea;
+}
+
+.add-device-section {
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #f8f9fa;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+}
+
+.add-device-section h4 {
+    margin-bottom: 15px;
+    color: #495057;
+}
+
+.add-device-section .form-group {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    flex-wrap: wrap;
+}
+
+.add-device-section .form-group label {
+    min-width: 100px;
+    font-weight: 600;
+}
+
+.add-device-section .form-group input {
+    flex: 1;
+    min-width: 200px;
+}
+
+.devices-list-section h4 {
+    margin-bottom: 15px;
+    color: #495057;
+}
+
+.devices-list {
+    display: grid;
+    gap: 15px;
+}
+
+.device-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: all 0.3s ease;
+}
+
+.device-item:hover {
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+    transform: translateY(-2px);
+}
+
+.device-item-info h4 {
+    margin-bottom: 8px;
+    color: #495057;
+}
+
+.device-item-info p {
+    margin: 4px 0;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+.device-item-actions {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+}
+
+.btn-sm {
+    padding: 6px 12px;
+    font-size: 0.8rem;
+}
+
+.text-muted {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* أنماط نمط اللعب */
+.game-mode-info {
+    background: linear-gradient(135deg, #28a745, #20c997);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-block;
+    margin: 2px 0;
+}
+
+.game-mode-duo {
+    background: linear-gradient(135deg, #17a2b8, #6f42c1);
+}
+
+.game-mode-quad {
+    background: linear-gradient(135deg, #fd7e14, #e83e8c);
+}
+
+/* تحسينات للثيم الليلي */
+[data-theme="dark"] .add-device-section {
+    background: #2d3748;
+    border-color: #4a5568;
+}
+
+[data-theme="dark"] .add-device-section h4 {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .devices-list-section h4 {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .device-item {
+    background: #2d3748;
+    border-color: #4a5568;
+}
+
+[data-theme="dark"] .device-item-info h4 {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .device-item-info p {
+    color: #a0aec0;
+}
+
+[data-theme="dark"] .text-muted {
+    color: #a0aec0;
 }

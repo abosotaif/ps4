@@ -4,12 +4,20 @@ class GamingCenterManager {
         this.devices = [];
         this.sessions = [];
         this.currentUser = null;
-        this.hourlyRate = 6000; // 6000 ليرة سورية للساعة
+        this.hourlyRates = {
+            duo: 6000,  // 6000 ليرة سورية للساعة للزوجي
+            quad: 8000  // 8000 ليرة سورية للساعة للرباعي
+        };
         this.timers = new Map();
         this.apiUrl = 'api.php';
         this.isOnline = true;
         this.currentReportData = null;
         this.currentTheme = 'light'; // إضافة متغير الثيم الحالي
+        this.currentTimeUpSessionId = null; // متغير لتتبع الجلسة في نافذة انتهاء الوقت
+        this.lastUpdateTime = 0; // متغير لتتبع آخر وقت تحديث
+        this.isUpdating = false; // متغير لمنع التحديثات المتداخلة
+        this.adminPassword = '12'; // كلمة مرور الإدارة
+        this.isAdminAuthenticated = false; // حالة المصادقة
         
         this.initializeApp();
     }
@@ -39,6 +47,10 @@ class GamingCenterManager {
         });
 
         // الأزرار الرئيسية
+        document.getElementById('manageDevicesBtn').addEventListener('click', () => {
+            this.showDevicesModal();
+        });
+
         document.getElementById('addSessionBtn').addEventListener('click', () => {
             this.showSessionModal();
         });
@@ -82,6 +94,37 @@ class GamingCenterManager {
             this.switchToUnlimited();
         });
 
+        // نافذة إدارة الأجهزة
+        document.getElementById('closeDevicesModal').addEventListener('click', () => {
+            this.hideDevicesModal();
+        });
+
+        document.getElementById('addDeviceBtn').addEventListener('click', () => {
+            this.addDevice();
+        });
+
+        // مستمعي أحداث إدارة الأسعار
+        document.getElementById('updateDuoPrice').addEventListener('click', () => {
+            this.updatePricing('duo');
+        });
+
+        document.getElementById('updateQuadPrice').addEventListener('click', () => {
+            this.updatePricing('quad');
+        });
+
+        // مستمعي أحداث مسح التقارير
+        document.getElementById('clearAllReportsBtn').addEventListener('click', () => {
+            this.showClearReportsModal();
+        });
+
+        document.getElementById('cancelClearReports').addEventListener('click', () => {
+            this.hideClearReportsModal();
+        });
+
+        document.getElementById('confirmClearReports').addEventListener('click', () => {
+            this.confirmClearReports();
+        });
+
         // نافذة التقارير
         document.getElementById('closeReportsModal').addEventListener('click', () => {
             this.hideReportsModal();
@@ -106,27 +149,49 @@ class GamingCenterManager {
         // إغلاق النوافذ عند النقر خارجها
         window.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
-                this.hideAllModals();
+                if (e.target.id === 'clearReportsModal') {
+                    this.hideClearReportsModal();
+                } else {
+                    this.hideAllModals();
+                }
             }
         });
 
         // تحديث البيانات كل 30 ثانية
-        setInterval(() => {
-            if (this.currentUser) {
+        this.dataUpdateInterval = setInterval(() => {
+            if (this.currentUser && !this.isUpdating) {
                 this.loadData();
             }
         }, 30000);
+
+        // تحديث العدادات كل ثانية للجلسات النشطة
+        this.timerUpdateInterval = setInterval(() => {
+            if (this.currentUser && !this.isUpdating) {
+                this.updateActiveSessionTimers();
+            }
+        }, 1000);
     }
 
     async loadData() {
-        if (this.isOnline) {
-            await this.loadDevices();
-            await this.loadActiveSessions();
-            await this.loadStats();
-        } else {
-            this.loadLocalData();
+        // منع التحديثات المتداخلة
+        if (this.isUpdating) {
+            return;
         }
-        this.updateUI();
+        
+        this.isUpdating = true;
+        
+        try {
+            if (this.isOnline) {
+                await this.loadDevices();
+                await this.loadActiveSessions();
+                await this.loadStats();
+            } else {
+                this.loadLocalData();
+            }
+            this.updateUI();
+        } finally {
+            this.isUpdating = false;
+        }
     }
 
     async loadDevices() {
@@ -174,6 +239,18 @@ class GamingCenterManager {
             this.currentUser = data.currentUser;
         } else {
             this.devices = this.initializeDefaultDevices();
+        }
+        
+        // تحميل الأسعار المحفوظة
+        this.loadSavedPricing();
+    }
+
+    loadSavedPricing() {
+        const savedPricing = localStorage.getItem('gamingCenterPricing');
+        if (savedPricing) {
+            const pricing = JSON.parse(savedPricing);
+            this.hourlyRates.duo = pricing.duo || 6000;
+            this.hourlyRates.quad = pricing.quad || 8000;
         }
     }
 
@@ -238,8 +315,23 @@ class GamingCenterManager {
     handleLogout() {
         this.currentUser = null;
         this.showLoginScreen();
+        
+        // إيقاف جميع العدادات
         this.timers.forEach(timer => clearInterval(timer));
         this.timers.clear();
+        
+        // إيقاف عدادات التحديث
+        if (this.dataUpdateInterval) {
+            clearInterval(this.dataUpdateInterval);
+        }
+        if (this.timerUpdateInterval) {
+            clearInterval(this.timerUpdateInterval);
+        }
+        
+        // إعادة تعيين المتغيرات
+        this.isUpdating = false;
+        this.currentTimeUpSessionId = null;
+        this.isAdminAuthenticated = false;
     }
 
     showLoginScreen() {
@@ -272,10 +364,76 @@ class GamingCenterManager {
         document.getElementById('reportsModal').classList.remove('show');
     }
 
+    showDevicesModal() {
+        // طلب كلمة المرور للإدارة
+        if (!this.isAdminAuthenticated) {
+            const password = prompt('أدخل كلمة مرور الإدارة:');
+            if (password !== this.adminPassword) {
+                alert('كلمة المرور غير صحيحة');
+                return;
+            }
+            this.isAdminAuthenticated = true;
+        }
+        
+        document.getElementById('devicesModal').classList.add('show');
+        this.loadDevicesList();
+        this.loadPricingSettings();
+    }
+
+    hideDevicesModal() {
+        document.getElementById('devicesModal').classList.remove('show');
+    }
+
     hideAllModals() {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.classList.remove('show');
         });
+    }
+
+    showTimeUpModal(deviceName, sessionId) {
+        // تجنب إظهار النافذة عدة مرات لنفس الجلسة
+        if (this.currentTimeUpSessionId === sessionId) {
+            return;
+        }
+        
+        // إخفاء أي نوافذ أخرى مفتوحة أولاً
+        this.hideAllModals();
+        
+        this.currentTimeUpSessionId = sessionId;
+        document.getElementById('timeUpDevice').textContent = deviceName;
+        document.getElementById('timeUpModal').classList.add('show');
+        
+        // إضافة تأثير صوتي (اختياري)
+        this.playTimeUpSound();
+    }
+
+    hideTimeUpModal() {
+        document.getElementById('timeUpModal').classList.remove('show');
+        this.currentTimeUpSessionId = null;
+    }
+
+    playTimeUpSound() {
+        // إنشاء صوت تنبيه بسيط
+        try {
+            const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioContext.createOscillator();
+            const gainNode = audioContext.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioContext.destination);
+            
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
+            oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+            
+            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            
+            oscillator.start(audioContext.currentTime);
+            oscillator.stop(audioContext.currentTime + 0.5);
+        } catch (error) {
+            console.log('لا يمكن تشغيل الصوت');
+        }
     }
 
     populateDeviceSelect() {
@@ -290,6 +448,9 @@ class GamingCenterManager {
                 select.appendChild(option);
             }
         });
+        
+        // تحديث خيارات نمط اللعب
+        this.updateGameModeOptions();
     }
 
     toggleTimeLimitInput(sessionType) {
@@ -304,10 +465,11 @@ class GamingCenterManager {
     async startSession() {
         const deviceId = parseInt(document.getElementById('deviceSelect').value);
         const playerName = document.getElementById('playerName').value;
+        const gameMode = document.getElementById('gameMode').value;
         const sessionType = document.getElementById('sessionType').value;
         const timeLimit = parseInt(document.getElementById('timeLimit').value) || null;
 
-        if (!deviceId || !playerName || !sessionType) {
+        if (!deviceId || !playerName || !gameMode || !sessionType) {
             alert('يرجى ملء جميع الحقول المطلوبة');
             return;
         }
@@ -328,7 +490,8 @@ class GamingCenterManager {
                         device_id: deviceId,
                         player_name: playerName,
                         session_type: sessionType,
-                        time_limit: timeLimit
+                        time_limit: timeLimit,
+                        game_mode: gameMode
                     })
                 });
 
@@ -344,14 +507,14 @@ class GamingCenterManager {
             } catch (error) {
                 console.error('خطأ في بدء الجلسة:', error);
                 this.isOnline = false;
-                this.startLocalSession(deviceId, playerName, sessionType, timeLimit);
+                this.startLocalSession(deviceId, playerName, sessionType, timeLimit, gameMode);
             }
         } else {
-            this.startLocalSession(deviceId, playerName, sessionType, timeLimit);
+            this.startLocalSession(deviceId, playerName, sessionType, timeLimit, gameMode);
         }
     }
 
-    startLocalSession(deviceId, playerName, sessionType, timeLimit) {
+    startLocalSession(deviceId, playerName, sessionType, timeLimit, gameMode) {
         const device = this.devices.find(d => d.id === deviceId);
         if (device.status !== 'available') {
             alert('هذا الجهاز غير متاح حالياً');
@@ -364,6 +527,7 @@ class GamingCenterManager {
             player_name: playerName,
             session_type: sessionType,
             time_limit: timeLimit,
+            game_mode: gameMode,
             start_time: new Date().toISOString(),
             end_time: null,
             is_active: true,
@@ -374,7 +538,10 @@ class GamingCenterManager {
         device.status = 'occupied';
 
         this.hideSessionModal();
-        this.updateUI();
+        
+        // تحديث البطاقة المحددة فقط بدلاً من إعادة رسم الصفحة
+        this.updateSpecificDeviceCard(device);
+        this.updateStats();
         this.saveLocalData();
         alert(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
     }
@@ -419,37 +586,169 @@ class GamingCenterManager {
         
         session.end_time = endTime.toISOString();
         session.is_active = false;
-        session.total_cost = this.calculateCost(elapsedMinutes);
+        // حساب التكلفة النهائية وحفظها
+        const finalCost = this.calculateCost(elapsedMinutes, session.game_mode);
+        session.total_cost = finalCost;
+        session.final_cost = finalCost; // حفظ التكلفة النهائية
+        session.final_cost_rate = this.hourlyRates[session.game_mode]; // حفظ السعر المستخدم
 
         device.status = 'available';
         device.total_play_time += elapsedMinutes;
         device.total_revenue += session.total_cost;
 
-        this.updateUI();
+        // تحديث البطاقة المحددة فقط بدلاً من إعادة رسم الصفحة
+        this.updateSpecificDeviceCard(device);
+        this.updateStats();
         this.saveLocalData();
         alert(`انتهت الجلسة. التكلفة: ${session.total_cost} ليرة سورية`);
     }
 
-    calculateCost(minutes) {
+    calculateCost(minutes, gameMode = 'duo') {
         const hours = minutes / 60;
-        return Math.ceil(hours * this.hourlyRate);
+        const hourlyRate = this.hourlyRates[gameMode] || this.hourlyRates.duo;
+        return Math.ceil(hours * hourlyRate);
     }
 
     updateUI() {
-        this.updateDevicesGrid();
-        if (!this.isOnline) {
-            this.updateStats();
+        // منع التحديثات المتداخلة
+        if (this.isUpdating) {
+            return;
+        }
+        
+        this.isUpdating = true;
+        
+        try {
+            this.updateDevicesGrid();
+            if (!this.isOnline) {
+                this.updateStats();
+            }
+        } finally {
+            this.isUpdating = false;
+        }
+    }
+
+    updateActiveSessionTimers() {
+        // منع التحديثات المتداخلة
+        if (this.isUpdating) {
+            return;
+        }
+        
+        this.isUpdating = true;
+        
+        try {
+            const currentTime = Date.now();
+            
+            // تحديث العدادات للجلسات النشطة
+            this.sessions.forEach(session => {
+                if (session.is_active) {
+                    const startTime = new Date(session.start_time);
+                    const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
+                    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+                    const remainingSeconds = elapsedSeconds % 60;
+                    
+                // تحديث الوقت المنقضي
+                const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
+                if (elapsedTimeElement) {
+                    const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+                    if (elapsedTimeElement.textContent !== newTimeText) {
+                        elapsedTimeElement.textContent = newTimeText;
+                    }
+                }
+                
+                // تحديث التكلفة الحالية
+                const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
+                if (costElement) {
+                    const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
+                    const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
+                    if (costElement.textContent !== newCostText) {
+                        costElement.textContent = newCostText;
+                    }
+                }
+                    
+                    // تحديث الوقت المتبقي للجلسات المحددة
+                    if (session.session_type === 'limited') {
+                        // حساب الوقت المتبقي بناءً على الوقت المحدد الحالي
+                        const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
+                        const timeRemainingElement = document.querySelector(`.time-remaining[data-session-id="${session.id}"]`);
+                        if (timeRemainingElement) {
+                            const newRemainingText = this.formatTimeWithSeconds(
+                                Math.floor(timeRemainingSeconds / 60), 
+                                timeRemainingSeconds % 60
+                            );
+                            
+                            if (timeRemainingElement.textContent !== newRemainingText) {
+                                timeRemainingElement.textContent = newRemainingText;
+                            }
+                            
+                            // تغيير لون النص عند اقتراب انتهاء الوقت
+                            timeRemainingElement.classList.remove('warning', 'danger');
+                            if (timeRemainingSeconds <= 300) { // 5 دقائق
+                                timeRemainingElement.classList.add('warning');
+                            }
+                            if (timeRemainingSeconds <= 60) { // دقيقة واحدة
+                                timeRemainingElement.classList.add('danger');
+                            }
+                        }
+                        
+                        // فحص انتهاء الوقت وإظهار النافذة (مع تحقق إضافي)
+                        // استخدام الوقت المحدد الحالي بدلاً من الوقت الأصلي
+                        if (elapsedMinutes >= session.time_limit && 
+                            !this.currentTimeUpSessionId && 
+                            session.session_type === 'limited' &&
+                            !document.getElementById('timeUpModal').classList.contains('show')) {
+                            const device = this.devices.find(d => d.id === session.device_id);
+                            if (device) {
+                                this.showTimeUpModal(device.name, session.id);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            this.lastUpdateTime = currentTime;
+        } finally {
+            this.isUpdating = false;
         }
     }
 
     updateDevicesGrid() {
         const grid = document.getElementById('devicesGrid');
-        grid.innerHTML = '';
+        
+        // التحقق من وجود تغييرات قبل إعادة إنشاء العناصر
+        const currentDeviceIds = Array.from(grid.children).map(card => 
+            card.getAttribute('data-device-id')
+        ).sort();
+        
+        const newDeviceIds = this.devices.map(device => device.id.toString()).sort();
+        
+        // إعادة إنشاء العناصر فقط إذا كان هناك تغييرات
+        if (JSON.stringify(currentDeviceIds) !== JSON.stringify(newDeviceIds)) {
+            grid.innerHTML = '';
 
-        this.devices.forEach(device => {
-            const card = this.createDeviceCard(device);
-            grid.appendChild(card);
-        });
+            this.devices.forEach(device => {
+                const card = this.createDeviceCard(device);
+                grid.appendChild(card);
+            });
+        } else {
+            // تحديث العناصر الموجودة فقط
+            this.devices.forEach(device => {
+                const existingCard = grid.querySelector(`[data-device-id="${device.id}"]`);
+                if (existingCard) {
+                    const newCard = this.createDeviceCard(device);
+                    existingCard.replaceWith(newCard);
+                }
+            });
+        }
+    }
+
+    updateSpecificDeviceCard(device) {
+        const grid = document.getElementById('devicesGrid');
+        const existingCard = grid.querySelector(`[data-device-id="${device.id}"]`);
+        
+        if (existingCard) {
+            const newCard = this.createDeviceCard(device);
+            existingCard.replaceWith(newCard);
+        }
     }
 
     createDeviceCard(device) {
@@ -463,16 +762,36 @@ class GamingCenterManager {
         let sessionInfo = '';
         if (isOccupied) {
             const startTime = new Date(session.start_time);
-            const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
-            const elapsedTime = this.formatTime(elapsedMinutes);
-            const cost = this.calculateCost(elapsedMinutes);
+            const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
+            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+            const remainingSeconds = elapsedSeconds % 60;
+            const elapsedTime = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+            const cost = session.current_cost || this.calculateCost(elapsedMinutes, session.game_mode);
+            const gameModeText = session.game_mode === 'quad' ? `رباعي (${this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
+            
+            // فحص انتهاء الوقت للجلسات المحددة
+            let timeRemainingText = '';
+            let timeUpClass = '';
+            if (session.session_type === 'limited') {
+                const timeRemaining = Math.max(0, session.time_limit - elapsedMinutes);
+                const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
+                timeRemainingText = `<p><strong>الوقت المتبقي:</strong> <span class="time-remaining" data-session-id="${session.id}">${this.formatTimeWithSeconds(Math.floor(timeRemainingSeconds / 60), timeRemainingSeconds % 60)}</span></p>`;
+                
+                // إضافة كلاس للتنبيه عند انتهاء الوقت
+                if (timeRemaining <= 0) {
+                    timeUpClass = 'time-up';
+                    // إظهار نافذة انتهاء الوقت
+                    this.showTimeUpModal(device.name, session.id);
+                }
+            }
             
             sessionInfo = `
                 <div class="device-info">
                     <p><strong>اللاعب:</strong> ${session.player_name}</p>
-                    <p><strong>الوقت المنقضي:</strong> ${elapsedTime}</p>
+                    <p><strong>نمط اللعب:</strong> ${gameModeText}</p>
+                    <p><strong>الوقت المنقضي:</strong> <span class="elapsed-time" data-session-id="${session.id}">${elapsedTime}</span></p>
                     <p><strong>نوع الجلسة:</strong> ${session.session_type === 'unlimited' ? 'وقت مفتوح' : 'وقت محدد'}</p>
-                    ${session.session_type === 'limited' ? `<p><strong>الوقت المتبقي:</strong> ${Math.max(0, session.time_limit - elapsedMinutes)} دقيقة</p>` : ''}
+                    ${timeRemainingText}
                     <p><strong>التكلفة الحالية:</strong> ${cost} ل.س</p>
                 </div>
                 <div class="device-actions">
@@ -507,6 +826,16 @@ class GamingCenterManager {
             </div>
             ${sessionInfo}
         `;
+
+        // إضافة كلاس التنبيه إذا انتهى الوقت
+        if (isOccupied && session.session_type === 'limited') {
+            const startTime = new Date(session.start_time);
+            const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
+            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+            if (elapsedMinutes >= session.time_limit) {
+                card.classList.add('time-up');
+            }
+        }
 
         return card;
     }
@@ -543,18 +872,33 @@ class GamingCenterManager {
                 if (session.is_active) {
                     const startTime = new Date(session.start_time);
                     const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
-                    return total + this.calculateCost(elapsedMinutes);
+                    return total + this.calculateCost(elapsedMinutes, session.game_mode);
                 } else {
-                    // استخدام التكلفة المحسوبة مسبقاً للجلسات المنتهية
-                    return total + (session.total_cost || 0);
+                    // للجلسات المنتهية، استخدام التكلفة النهائية المحفوظة
+                    return total + (session.final_cost || session.total_cost || 0);
                 }
             }
             return total;
         }, 0);
 
-        document.getElementById('activeSessions').textContent = activeSessions;
-        document.getElementById('totalTime').textContent = this.formatTime(totalTime);
-        document.getElementById('totalRevenue').textContent = totalRevenue.toLocaleString();
+        // تحديث النصوص فقط عند تغييرها
+        const activeSessionsElement = document.getElementById('activeSessions');
+        const totalTimeElement = document.getElementById('totalTime');
+        const totalRevenueElement = document.getElementById('totalRevenue');
+        
+        if (activeSessionsElement.textContent !== activeSessions.toString()) {
+            activeSessionsElement.textContent = activeSessions;
+        }
+        
+        const formattedTime = this.formatTime(totalTime);
+        if (totalTimeElement.textContent !== formattedTime) {
+            totalTimeElement.textContent = formattedTime;
+        }
+        
+        const formattedRevenue = totalRevenue.toLocaleString();
+        if (totalRevenueElement.textContent !== formattedRevenue) {
+            totalRevenueElement.textContent = formattedRevenue;
+        }
     }
 
     updateStatsDisplay(stats) {
@@ -568,6 +912,14 @@ class GamingCenterManager {
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return `${hours}:${mins.toString().padStart(2, '0')}`;
+    }
+
+    formatTimeWithSeconds(minutes, seconds) {
+        if (isNaN(minutes) || minutes < 0) return '0:00:00';
+        if (isNaN(seconds) || seconds < 0) seconds = 0;
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${hours}:${mins.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
     resetSessionForm() {
@@ -622,10 +974,15 @@ class GamingCenterManager {
                     return total + Math.floor((endTime - startTime) / (1000 * 60));
                 }, 0),
                 total_revenue: daySessions.reduce((total, session) => {
-                    const startTime = new Date(session.start_time);
-                    const endTime = session.is_active ? new Date() : new Date(session.end_time);
-                    const elapsedMinutes = Math.floor((endTime - startTime) / (1000 * 60));
-                    return total + this.calculateCost(elapsedMinutes);
+                    if (session.is_active) {
+                        const startTime = new Date(session.start_time);
+                        const endTime = new Date();
+                        const elapsedMinutes = Math.floor((endTime - startTime) / (1000 * 60));
+                        return total + this.calculateCost(elapsedMinutes, session.game_mode);
+                    } else {
+                        // للجلسات المنتهية، استخدام التكلفة النهائية المحفوظة
+                        return total + (session.final_cost || session.total_cost || 0);
+                    }
                 }, 0)
             }
         });
@@ -658,13 +1015,38 @@ class GamingCenterManager {
             const startTime = new Date(session.start_time);
             const endTime = session.is_active ? new Date() : new Date(session.end_time);
             const elapsedMinutes = Math.floor((endTime - startTime) / (1000 * 60));
-            const cost = this.calculateCost(elapsedMinutes);
+            // استخدام التكلفة النهائية المحفوظة للجلسات المنتهية
+            const cost = session.final_cost || this.calculateCost(elapsedMinutes, session.game_mode);
             const status = session.is_active ? 'نشطة' : 'منتهية';
+            const gameModeText = session.game_mode === 'quad' ? `رباعي (${session.final_cost_rate || this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${session.final_cost_rate || this.hourlyRates.duo} ل.س/ساعة)`;
+
+            // تنسيق التواريخ (ميلادي بالأرقام العادية)
+            const startDate = new Date(session.start_time).toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const endDate = session.end_time ? 
+                new Date(session.end_time).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }) : 'لم تنته بعد';
 
             html += `
                 <div class="report-item">
                     <h4>${device ? device.name : 'جهاز غير معروف'} - ${session.player_name}</h4>
+                    <p><strong>نمط اللعب:</strong> ${gameModeText}</p>
                     <p><strong>نوع الجلسة:</strong> ${session.session_type === 'unlimited' ? 'وقت مفتوح' : 'وقت محدد'}</p>
+                    <p><strong>تاريخ البداية:</strong> ${startDate}</p>
+                    <p><strong>تاريخ النهاية:</strong> ${endDate}</p>
                     <p><strong>الوقت:</strong> ${this.formatTime(elapsedMinutes)}</p>
                     <p><strong>التكلفة:</strong> ${cost} ل.س</p>
                     <p><strong>الحالة:</strong> ${status}</p>
@@ -696,14 +1078,25 @@ class GamingCenterManager {
         const activeSession = this.getActiveSessionFromTimeUp();
         if (activeSession) {
             this.endSession(activeSession.id);
-            this.hideAllModals();
+            this.hideTimeUpModal();
+            // إعادة تعيين متغير التتبع
+            this.currentTimeUpSessionId = null;
         }
     }
 
     async extendSession() {
         const activeSession = this.getActiveSessionFromTimeUp();
         if (activeSession) {
-            const extension = prompt('كم دقيقة إضافية تريد إضافة؟', '30');
+            let extension = prompt('كم دقيقة إضافية تريد إضافة؟', '30');
+            
+            // التحقق من صحة الإدخال وإعادة الطلب إذا لزم الأمر
+            while (!extension || isNaN(extension) || extension <= 0) {
+                if (extension === null) {
+                    return; // المستخدم ألغى العملية
+                }
+                extension = prompt('يرجى إدخال عدد صحيح أكبر من الصفر:\nكم دقيقة إضافية تريد إضافة؟', '30');
+            }
+            
             if (extension && !isNaN(extension) && extension > 0) {
                 if (this.isOnline) {
                     try {
@@ -720,7 +1113,7 @@ class GamingCenterManager {
 
                         const result = await response.json();
                         if (result.success) {
-                            this.hideAllModals();
+                            this.hideTimeUpModal();
                             alert(`تم تمديد الوقت بمقدار ${extension} دقيقة`);
                         } else {
                             alert(result.message || 'فشل في تمديد الوقت');
@@ -730,8 +1123,21 @@ class GamingCenterManager {
                         alert('خطأ في الاتصال بالخادم');
                     }
                 } else {
+                    // تحديث الوقت المحدد في الجلسة
                     activeSession.time_limit += parseInt(extension);
-                    this.hideAllModals();
+                    
+                    // حفظ البيانات المحلية
+                    this.saveLocalData();
+                    
+                    // إعادة تعيين متغير التتبع لتجنب التضارب
+                    this.currentTimeUpSessionId = null;
+                    
+                    // إخفاء النافذة
+                    this.hideTimeUpModal();
+                    
+                    // تحديث العدادات فقط بدلاً من إعادة رسم الصفحة
+                    this.updateActiveSessionTimers();
+                    
                     alert(`تم تمديد الوقت بمقدار ${extension} دقيقة`);
                 }
             }
@@ -755,7 +1161,7 @@ class GamingCenterManager {
 
                     const result = await response.json();
                     if (result.success) {
-                        this.hideAllModals();
+                        this.hideTimeUpModal();
                         alert('تم التحويل إلى وقت مفتوح');
                     } else {
                         alert(result.message || 'فشل في التحويل');
@@ -765,9 +1171,22 @@ class GamingCenterManager {
                     alert('خطأ في الاتصال بالخادم');
                 }
             } else {
+                // تحديث نوع الجلسة
                 activeSession.session_type = 'unlimited';
                 activeSession.time_limit = null;
-                this.hideAllModals();
+                
+                // حفظ البيانات المحلية
+                this.saveLocalData();
+                
+                // إعادة تعيين متغير التتبع لتجنب التضارب
+                this.currentTimeUpSessionId = null;
+                
+                // إخفاء النافذة
+                this.hideTimeUpModal();
+                
+                // تحديث العدادات فقط بدلاً من إعادة رسم الصفحة
+                this.updateActiveSessionTimers();
+                
                 alert('تم التحويل إلى وقت مفتوح');
             }
         }
@@ -959,7 +1378,10 @@ class GamingCenterManager {
                 <tr>
                     <th>الجهاز</th>
                     <th>اللاعب</th>
+                    <th>نمط اللعب</th>
                     <th>نوع الجلسة</th>
+                    <th>تاريخ البداية</th>
+                    <th>تاريخ النهاية</th>
                     <th>الوقت</th>
                     <th>التكلفة</th>
                     <th>الحالة</th>
@@ -973,15 +1395,40 @@ class GamingCenterManager {
             const startTime = new Date(session.start_time);
             const endTime = session.is_active ? new Date() : new Date(session.end_time);
             const elapsedMinutes = Math.floor((endTime - startTime) / (1000 * 60));
-            const cost = this.calculateCost(elapsedMinutes);
+            // استخدام التكلفة النهائية المحفوظة للجلسات المنتهية
+            const cost = session.final_cost || this.calculateCost(elapsedMinutes, session.game_mode);
             const status = session.is_active ? 'نشطة' : 'منتهية';
             const statusClass = session.is_active ? 'status-active' : 'status-ended';
+            const gameModeText = session.game_mode === 'quad' ? `رباعي (${session.final_cost_rate || this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${session.final_cost_rate || this.hourlyRates.duo} ل.س/ساعة)`;
+            
+            // تنسيق التواريخ (ميلادي بالأرقام العادية)
+            const startDate = new Date(session.start_time).toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+            
+            const endDate = session.end_time ? 
+                new Date(session.end_time).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                }) : 'لم تنته بعد';
             
             html += `
                 <tr>
                     <td>${device ? device.name : 'غير معروف'}</td>
                     <td>${session.player_name}</td>
+                    <td>${gameModeText}</td>
                     <td>${session.session_type === 'unlimited' ? 'وقت مفتوح' : 'وقت محدد'}</td>
+                    <td>${startDate}</td>
+                    <td>${endDate}</td>
                     <td>${this.formatTime(elapsedMinutes)}</td>
                     <td>${cost} ل.س</td>
                     <td class="${statusClass}">${status}</td>
@@ -995,7 +1442,14 @@ class GamingCenterManager {
         
         <div class="report-footer">
             <p>تم إنشاء التقرير بواسطة نظام إدارة صالة الألعاب</p>
-            <p>تاريخ الإنشاء: ${new Date().toLocaleString('ar-SA')}</p>
+            <p>تاريخ الإنشاء: ${new Date().toLocaleString('en-US', {
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            })}</p>
         </div>
     </div>
     
@@ -1071,13 +1525,38 @@ class GamingCenterManager {
                 const startTime = new Date(session.start_time);
                 const endTime = session.is_active ? new Date() : new Date(session.end_time);
                 const elapsedMinutes = Math.floor((endTime - startTime) / (1000 * 60));
-                const cost = this.calculateCost(elapsedMinutes);
+                // استخدام التكلفة النهائية المحفوظة للجلسات المنتهية
+                const cost = session.final_cost || this.calculateCost(elapsedMinutes, session.game_mode);
                 const status = session.is_active ? 'Active' : 'Ended';
+                const gameModeText = session.game_mode === 'quad' ? `Quad (${session.final_cost_rate || this.hourlyRates.quad} SYP/hour)` : `Duo (${session.final_cost_rate || this.hourlyRates.duo} SYP/hour)`;
+                
+                // تنسيق التواريخ (ميلادي بالأرقام العادية)
+                const startDate = new Date(session.start_time).toLocaleString('en-US', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    hour12: false
+                });
+                
+                const endDate = session.end_time ? 
+                    new Date(session.end_time).toLocaleString('en-US', {
+                        year: 'numeric',
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                        hour12: false
+                    }) : 'Not ended yet';
                 
                 return [
                     device ? device.name : 'Unknown',
                     session.player_name,
+                    gameModeText,
                     session.session_type === 'unlimited' ? 'Unlimited' : 'Limited',
+                    startDate,
+                    endDate,
                     this.formatTime(elapsedMinutes),
                     `${cost} SYP`,
                     status
@@ -1085,7 +1564,7 @@ class GamingCenterManager {
             });
 
             // رؤوس الجدول بالإنجليزية
-            const headers = ['Device', 'Player', 'Session Type', 'Time', 'Cost', 'Status'];
+            const headers = ['Device', 'Player', 'Game Mode', 'Session Type', 'Start Date', 'End Date', 'Time', 'Cost', 'Status'];
 
             doc.autoTable({
                 head: [headers],
@@ -1173,6 +1652,276 @@ class GamingCenterManager {
 
     saveTheme() {
         localStorage.setItem('gamingCenterTheme', this.currentTheme);
+    }
+
+    // دوال إدارة الأجهزة
+    async addDevice() {
+        const deviceName = document.getElementById('newDeviceName').value.trim();
+        
+        if (!deviceName) {
+            alert('يرجى إدخال اسم الجهاز');
+            return;
+        }
+
+        if (this.isOnline) {
+            try {
+                const response = await fetch(`${this.apiUrl}?action=add_device`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ device_name: deviceName })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    document.getElementById('newDeviceName').value = '';
+                    await this.loadData();
+                    this.loadDevicesList();
+                    alert('تم إضافة الجهاز بنجاح');
+                } else {
+                    alert(result.message || 'فشل في إضافة الجهاز');
+                }
+            } catch (error) {
+                console.error('خطأ في إضافة الجهاز:', error);
+                alert('خطأ في الاتصال بالخادم');
+            }
+        } else {
+            // إضافة محلية
+            const newDevice = {
+                id: Date.now(),
+                name: deviceName,
+                status: 'available',
+                total_play_time: 0,
+                total_revenue: 0
+            };
+            
+            this.devices.push(newDevice);
+            document.getElementById('newDeviceName').value = '';
+            
+            // إضافة البطاقة الجديدة فقط بدلاً من إعادة رسم الصفحة
+            const grid = document.getElementById('devicesGrid');
+            const newCard = this.createDeviceCard(newDevice);
+            grid.appendChild(newCard);
+            
+            this.loadDevicesList();
+            this.saveLocalData();
+            alert('تم إضافة الجهاز بنجاح');
+        }
+    }
+
+    async deleteDevice(deviceId) {
+        if (!confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
+            return;
+        }
+
+        if (this.isOnline) {
+            try {
+                const response = await fetch(`${this.apiUrl}?action=delete_device`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ device_id: deviceId })
+                });
+
+                const result = await response.json();
+                
+                if (result.success) {
+                    await this.loadData();
+                    this.loadDevicesList();
+                    alert('تم حذف الجهاز بنجاح');
+                } else {
+                    alert(result.message || 'فشل في حذف الجهاز');
+                }
+            } catch (error) {
+                console.error('خطأ في حذف الجهاز:', error);
+                alert('خطأ في الاتصال بالخادم');
+            }
+        } else {
+            // حذف محلي
+            const device = this.devices.find(d => d.id === deviceId);
+            if (device && device.status === 'available') {
+                this.devices = this.devices.filter(d => d.id !== deviceId);
+                
+                // حذف البطاقة المحددة فقط بدلاً من إعادة رسم الصفحة
+                const grid = document.getElementById('devicesGrid');
+                const cardToRemove = grid.querySelector(`[data-device-id="${deviceId}"]`);
+                if (cardToRemove) {
+                    cardToRemove.remove();
+                }
+                
+                this.loadDevicesList();
+                this.saveLocalData();
+                alert('تم حذف الجهاز بنجاح');
+            } else {
+                alert('لا يمكن حذف الجهاز لوجود جلسات نشطة');
+            }
+        }
+    }
+
+    loadDevicesList() {
+        const devicesList = document.getElementById('devicesList');
+        devicesList.innerHTML = '';
+
+        this.devices.forEach(device => {
+            const deviceItem = document.createElement('div');
+            deviceItem.className = 'device-item';
+            deviceItem.innerHTML = `
+                <div class="device-item-info">
+                    <h4>${device.name}</h4>
+                    <p>الحالة: <span class="status-${device.status}">${device.status === 'available' ? 'متاح' : 'مشغول'}</span></p>
+                    <p>إجمالي وقت اللعب: ${this.formatTime(device.total_play_time || 0)}</p>
+                    <p>إجمالي الإيرادات: ${(device.total_revenue || 0).toLocaleString()} ل.س</p>
+                </div>
+                <div class="device-item-actions">
+                    ${device.status === 'available' ? 
+                        `<button class="btn btn-danger btn-sm" onclick="gamingCenter.deleteDevice(${device.id})">
+                            <i class="fas fa-trash"></i>
+                            حذف
+                        </button>` : 
+                        '<span class="text-muted">لا يمكن حذف جهاز مشغول</span>'
+                    }
+                </div>
+            `;
+            devicesList.appendChild(deviceItem);
+        });
+    }
+
+    loadPricingSettings() {
+        // تحميل الأسعار الحالية
+        document.getElementById('duoPrice').value = this.hourlyRates.duo;
+        document.getElementById('quadPrice').value = this.hourlyRates.quad;
+        
+        // تحديث خيارات نمط اللعب
+        this.updateGameModeOptions();
+    }
+
+    updatePricing(gameMode) {
+        const priceInput = document.getElementById(`${gameMode}Price`);
+        const newPrice = parseInt(priceInput.value);
+        
+        if (!newPrice || newPrice < 1000 || newPrice > 50000) {
+            alert('يرجى إدخال سعر صحيح بين 1000 و 50000 ليرة سورية');
+            return;
+        }
+
+        // تحديث السعر
+        this.hourlyRates[gameMode] = newPrice;
+        
+        // حفظ الأسعار في التخزين المحلي
+        localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+        
+        // تحديث الجلسات النشطة فقط (بدون تغيير الإيرادات السابقة)
+        this.sessions.forEach(session => {
+            if (session.is_active) {
+                // إعادة حساب التكلفة للجلسات النشطة فقط
+                const startTime = new Date(session.start_time);
+                const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
+                // تحديث التكلفة الحالية للجلسات النشطة فقط
+                session.current_cost = this.calculateCost(elapsedMinutes, session.game_mode);
+            } else if (session.final_cost) {
+                // للجلسات المنتهية، نستخدم التكلفة النهائية المحفوظة
+                session.total_cost = session.final_cost;
+            }
+        });
+        
+        // تحديث واجهة المستخدم
+        this.updateUI();
+        
+        // تحديث نصوص الأسعار في قائمة اختيار نمط اللعب
+        this.updateGameModeOptions();
+        
+        alert(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+    }
+
+    updateGameModeOptions() {
+        // تحديث خيارات نمط اللعب في قائمة الاختيار
+        const gameModeSelect = document.getElementById('gameMode');
+        if (gameModeSelect) {
+            const duoOption = gameModeSelect.querySelector('option[value="duo"]');
+            const quadOption = gameModeSelect.querySelector('option[value="quad"]');
+            
+            if (duoOption) {
+                duoOption.textContent = `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
+            }
+            if (quadOption) {
+                quadOption.textContent = `رباعي (${this.hourlyRates.quad} ل.س/ساعة)`;
+            }
+        }
+    }
+
+    showClearReportsModal() {
+        // إخفاء نافذة الإدارة
+        this.hideDevicesModal();
+        
+        // إظهار نافذة تأكيد مسح التقارير
+        document.getElementById('clearReportsModal').classList.add('show');
+        
+        // مسح حقل كلمة المرور
+        document.getElementById('clearReportsPassword').value = '';
+    }
+
+    hideClearReportsModal() {
+        document.getElementById('clearReportsModal').classList.remove('show');
+    }
+
+    confirmClearReports() {
+        const password = document.getElementById('clearReportsPassword').value;
+        
+        if (password !== this.adminPassword) {
+            alert('كلمة المرور غير صحيحة');
+            return;
+        }
+
+        // تأكيد إضافي
+        const finalConfirm = confirm('هل أنت متأكد تماماً من حذف جميع التقارير المالية والجلسات السابقة؟\n\nهذه العملية لا يمكن التراجع عنها!');
+        
+        if (!finalConfirm) {
+            return;
+        }
+
+        // مسح جميع البيانات
+        this.clearAllReports();
+        
+        // إخفاء النافذة
+        this.hideClearReportsModal();
+        
+        alert('تم مسح جميع التقارير المالية والجلسات السابقة بنجاح');
+    }
+
+    clearAllReports() {
+        // مسح جميع الجلسات
+        this.sessions = [];
+        
+        // إعادة تعيين إحصائيات الأجهزة
+        this.devices.forEach(device => {
+            device.total_play_time = 0;
+            device.total_revenue = 0;
+        });
+        
+        // إيقاف جميع الجلسات النشطة
+        this.sessions.forEach(session => {
+            if (session.is_active) {
+                const device = this.devices.find(d => d.id === session.device_id);
+                if (device) {
+                    device.status = 'available';
+                }
+            }
+        });
+        
+        // مسح البيانات المحفوظة
+        localStorage.removeItem('gamingCenterData');
+        
+        // حفظ البيانات الجديدة
+        this.saveLocalData();
+        
+        // تحديث واجهة المستخدم
+        this.updateUI();
+        
+        // إعادة تعيين حالة المصادقة
+        this.isAdminAuthenticated = false;
     }
 }
 

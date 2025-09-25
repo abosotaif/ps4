@@ -49,6 +49,10 @@
                 <button id="themeToggleBtn" class="btn btn-theme" title="تبديل الثيم">
                     <i class="fas fa-moon"></i>
                 </button>
+                <button id="manageDevicesBtn" class="btn btn-info">
+                    <i class="fas fa-cogs"></i>
+                    إدارة
+                </button>
                 <button id="addSessionBtn" class="btn btn-primary">
                     <i class="fas fa-plus"></i>
                     بدء جلسة جديدة
@@ -117,6 +121,14 @@
                     <input type="text" id="playerName" required>
                 </div>
                 <div class="form-group">
+                    <label for="gameMode">نمط اللعب:</label>
+                    <select id="gameMode" required>
+                        <option value="">-- اختر نمط اللعب --</option>
+                        <option value="duo">زوجي (6000 ل.س/ساعة)</option>
+                        <option value="quad">رباعي (8000 ل.س/ساعة)</option>
+                    </select>
+                </div>
+                <div class="form-group">
                     <label for="sessionType">نوع الجلسة:</label>
                     <select id="sessionType" required>
                         <option value="">-- اختر نوع الجلسة --</option>
@@ -156,6 +168,104 @@
                     <button class="btn btn-success" id="switchToUnlimited">
                         <i class="fas fa-infinity"></i>
                         التحويل لوقت مفتوح
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة الإدارة -->
+    <div id="devicesModal" class="modal">
+        <div class="modal-content devices-modal">
+            <div class="modal-header">
+                <h3>الإدارة</h3>
+                <button class="close-btn" id="closeDevicesModal">&times;</button>
+            </div>
+            <div class="devices-content">
+                <!-- قسم إدارة الأسعار -->
+                <div class="pricing-section">
+                    <h4><i class="fas fa-money-bill-wave"></i> إدارة الأسعار</h4>
+                    <div class="pricing-controls">
+                        <div class="form-group">
+                            <label for="duoPrice">سعر النمط الزوجي (ل.س/ساعة):</label>
+                            <input type="number" id="duoPrice" min="1000" max="50000" step="100">
+                            <button class="btn btn-warning" id="updateDuoPrice">
+                                <i class="fas fa-save"></i>
+                                تحديث
+                            </button>
+                        </div>
+                        <div class="form-group">
+                            <label for="quadPrice">سعر النمط الرباعي (ل.س/ساعة):</label>
+                            <input type="number" id="quadPrice" min="1000" max="50000" step="100">
+                            <button class="btn btn-warning" id="updateQuadPrice">
+                                <i class="fas fa-save"></i>
+                                تحديث
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="add-device-section">
+                    <h4><i class="fas fa-plus-circle"></i> إضافة جهاز جديد</h4>
+                    <div class="form-group">
+                        <label for="newDeviceName">اسم الجهاز:</label>
+                        <input type="text" id="newDeviceName" placeholder="مثال: PS4 #7">
+                        <button class="btn btn-success" id="addDeviceBtn">
+                            <i class="fas fa-plus"></i>
+                            إضافة جهاز
+                        </button>
+                    </div>
+                </div>
+                <div class="devices-list-section">
+                    <h4><i class="fas fa-list"></i> الأجهزة الموجودة</h4>
+                    <div class="devices-list" id="devicesList">
+                        <!-- سيتم ملء قائمة الأجهزة هنا -->
+                    </div>
+                </div>
+                
+                <!-- قسم مسح التقارير -->
+                <div class="clear-reports-section">
+                    <h4><i class="fas fa-trash-alt"></i> مسح التقارير المالية</h4>
+                    <div class="clear-reports-controls">
+                        <p class="warning-text">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            تحذير: هذه العملية ستحذف جميع التقارير المالية والجلسات السابقة نهائياً ولا يمكن التراجع عنها.
+                        </p>
+                        <button class="btn btn-danger" id="clearAllReportsBtn">
+                            <i class="fas fa-trash-alt"></i>
+                            مسح كافة التقارير المالية
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- نافذة تأكيد مسح التقارير -->
+    <div id="clearReportsModal" class="modal">
+        <div class="modal-content clear-reports-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> تأكيد مسح التقارير</h3>
+            </div>
+            <div class="clear-reports-content">
+                <div class="warning-message">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <h4>تحذير خطير!</h4>
+                    <p>أنت على وشك حذف جميع التقارير المالية والجلسات السابقة نهائياً.</p>
+                    <p><strong>هذه العملية لا يمكن التراجع عنها!</strong></p>
+                </div>
+                <div class="password-confirmation">
+                    <label for="clearReportsPassword">أدخل كلمة مرور الإدارة للتأكيد:</label>
+                    <input type="password" id="clearReportsPassword" placeholder="كلمة المرور">
+                </div>
+                <div class="clear-reports-actions">
+                    <button class="btn btn-secondary" id="cancelClearReports">
+                        <i class="fas fa-times"></i>
+                        إلغاء
+                    </button>
+                    <button class="btn btn-danger" id="confirmClearReports">
+                        <i class="fas fa-trash-alt"></i>
+                        تأكيد المسح
                     </button>
                 </div>
             </div>

@@ -19,6 +19,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     device_id INT NOT NULL,
     player_name VARCHAR(100) NOT NULL,
     session_type ENUM('unlimited', 'limited') NOT NULL,
+    game_mode ENUM('duo', 'quad') NOT NULL DEFAULT 'duo',
     time_limit INT NULL,
     start_time TIMESTAMP NOT NULL,
     end_time TIMESTAMP NULL,
@@ -70,18 +71,51 @@ INSERT INTO users (username, password, role) VALUES
 ('admin', 'admin123', 'admin');
 
 INSERT INTO settings (setting_key, setting_value) VALUES 
-('hourly_rate', '6000'),
+('hourly_rate_duo', '6000'),
+('hourly_rate_quad', '8000'),
 ('currency', 'ل.س');
 
 -- إجراءات مخزنة مفيدة
 DELIMITER //
+
+-- إجراء لإضافة جهاز جديد
+CREATE PROCEDURE AddDevice(IN p_name VARCHAR(50))
+BEGIN
+    INSERT INTO devices (name) VALUES (p_name);
+    SELECT LAST_INSERT_ID() as device_id;
+END //
+
+-- إجراء لحذف جهاز
+CREATE PROCEDURE DeleteDevice(IN p_device_id INT)
+BEGIN
+    DECLARE device_exists INT DEFAULT 0;
+    DECLARE has_active_sessions INT DEFAULT 0;
+    
+    -- التحقق من وجود الجهاز
+    SELECT COUNT(*) INTO device_exists FROM devices WHERE id = p_device_id;
+    
+    IF device_exists > 0 THEN
+        -- التحقق من وجود جلسات نشطة
+        SELECT COUNT(*) INTO has_active_sessions FROM sessions WHERE device_id = p_device_id AND is_active = TRUE;
+        
+        IF has_active_sessions = 0 THEN
+            DELETE FROM devices WHERE id = p_device_id;
+            SELECT 1 as success, 'تم حذف الجهاز بنجاح' as message;
+        ELSE
+            SELECT 0 as success, 'لا يمكن حذف الجهاز لوجود جلسات نشطة' as message;
+        END IF;
+    ELSE
+        SELECT 0 as success, 'الجهاز غير موجود' as message;
+    END IF;
+END //
 
 -- إجراء لبدء جلسة جديدة
 CREATE PROCEDURE StartSession(
     IN p_device_id INT,
     IN p_player_name VARCHAR(100),
     IN p_session_type ENUM('unlimited', 'limited'),
-    IN p_time_limit INT
+    IN p_time_limit INT,
+    IN p_game_mode ENUM('duo', 'quad')
 )
 BEGIN
     DECLARE device_status VARCHAR(20);
@@ -91,8 +125,8 @@ BEGIN
     
     IF device_status = 'available' THEN
         -- بدء الجلسة
-        INSERT INTO sessions (device_id, player_name, session_type, time_limit, start_time, is_active)
-        VALUES (p_device_id, p_player_name, p_session_type, p_time_limit, NOW(), TRUE);
+        INSERT INTO sessions (device_id, player_name, session_type, time_limit, game_mode, start_time, is_active)
+        VALUES (p_device_id, p_player_name, p_session_type, p_time_limit, p_game_mode, NOW(), TRUE);
         
         -- تحديث حالة الجهاز
         UPDATE devices SET status = 'occupied' WHERE id = p_device_id;
@@ -108,21 +142,27 @@ CREATE PROCEDURE EndSession(IN p_session_id INT)
 BEGIN
     DECLARE v_device_id INT;
     DECLARE v_start_time TIMESTAMP;
+    DECLARE v_game_mode VARCHAR(10);
     DECLARE v_elapsed_minutes INT;
     DECLARE v_hourly_rate DECIMAL(10,2);
     DECLARE v_total_cost DECIMAL(10,2);
     
     -- الحصول على بيانات الجلسة
-    SELECT device_id, start_time INTO v_device_id, v_start_time 
+    SELECT device_id, start_time, game_mode INTO v_device_id, v_start_time, v_game_mode 
     FROM sessions WHERE id = p_session_id AND is_active = TRUE;
     
     IF v_device_id IS NOT NULL THEN
         -- حساب الوقت المنقضي
         SET v_elapsed_minutes = TIMESTAMPDIFF(MINUTE, v_start_time, NOW());
         
-        -- الحصول على سعر الساعة
-        SELECT CAST(setting_value AS DECIMAL(10,2)) INTO v_hourly_rate 
-        FROM settings WHERE setting_key = 'hourly_rate';
+        -- الحصول على سعر الساعة حسب نمط اللعب
+        IF v_game_mode = 'quad' THEN
+            SELECT CAST(setting_value AS DECIMAL(10,2)) INTO v_hourly_rate 
+            FROM settings WHERE setting_key = 'hourly_rate_quad';
+        ELSE
+            SELECT CAST(setting_value AS DECIMAL(10,2)) INTO v_hourly_rate 
+            FROM settings WHERE setting_key = 'hourly_rate_duo';
+        END IF;
         
         -- حساب التكلفة
         SET v_total_cost = CEIL((v_elapsed_minutes / 60.0) * v_hourly_rate);
@@ -154,6 +194,7 @@ BEGIN
         d.name as device_name,
         s.player_name,
         s.session_type,
+        s.game_mode,
         s.time_limit,
         s.start_time,
         TIMESTAMPDIFF(MINUTE, s.start_time, NOW()) as elapsed_minutes,
@@ -162,7 +203,8 @@ BEGIN
             ELSE NULL
         END as remaining_minutes,
         CEIL((TIMESTAMPDIFF(MINUTE, s.start_time, NOW()) / 60.0) * 
-             (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings WHERE setting_key = 'hourly_rate')) as current_cost
+             (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings 
+              WHERE setting_key = CASE WHEN s.game_mode = 'quad' THEN 'hourly_rate_quad' ELSE 'hourly_rate_duo' END)) as current_cost
     FROM sessions s
     JOIN devices d ON s.device_id = d.id
     WHERE s.is_active = TRUE;
@@ -176,6 +218,7 @@ BEGIN
         d.name as device_name,
         s.player_name,
         s.session_type,
+        s.game_mode,
         s.start_time,
         s.end_time,
         CASE 
@@ -201,7 +244,8 @@ BEGIN
         END), 0) FROM sessions WHERE DATE(start_time) = CURDATE()) as total_time_today,
         (SELECT COALESCE(SUM(CASE 
             WHEN is_active = TRUE THEN CEIL((TIMESTAMPDIFF(MINUTE, start_time, NOW()) / 60.0) * 
-                (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings WHERE setting_key = 'hourly_rate'))
+                (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings 
+                 WHERE setting_key = CASE WHEN game_mode = 'quad' THEN 'hourly_rate_quad' ELSE 'hourly_rate_duo' END))
             ELSE total_cost
         END), 0) FROM sessions WHERE DATE(start_time) = CURDATE()) as total_revenue_today;
 END //
@@ -223,7 +267,8 @@ BEGIN
         END), 0),
         COALESCE(SUM(CASE 
             WHEN is_active = TRUE THEN CEIL((TIMESTAMPDIFF(MINUTE, start_time, NOW()) / 60.0) * 
-                (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings WHERE setting_key = 'hourly_rate'))
+                (SELECT CAST(setting_value AS DECIMAL(10,2)) FROM settings 
+                 WHERE setting_key = CASE WHEN game_mode = 'quad' THEN 'hourly_rate_quad' ELSE 'hourly_rate_duo' END))
             ELSE total_cost
         END), 0)
     INTO v_total_sessions, v_total_time, v_total_revenue

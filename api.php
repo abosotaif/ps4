@@ -48,6 +48,12 @@ switch($action) {
     case 'switch_to_unlimited':
         switchToUnlimited($pdo);
         break;
+    case 'add_device':
+        addDevice($pdo);
+        break;
+    case 'delete_device':
+        deleteDevice($pdo);
+        break;
     default:
         echo json_encode(['error' => 'عملية غير صحيحة']);
 }
@@ -86,10 +92,11 @@ function startSession($pdo) {
     $player_name = $input['player_name'] ?? '';
     $session_type = $input['session_type'] ?? '';
     $time_limit = $input['time_limit'] ?? null;
+    $game_mode = $input['game_mode'] ?? 'duo';
     
     try {
-        $stmt = $pdo->prepare("CALL StartSession(?, ?, ?, ?)");
-        $stmt->execute([$device_id, $player_name, $session_type, $time_limit]);
+        $stmt = $pdo->prepare("CALL StartSession(?, ?, ?, ?, ?)");
+        $stmt->execute([$device_id, $player_name, $session_type, $time_limit, $game_mode]);
         $result = $stmt->fetch(PDO::FETCH_ASSOC);
         
         if ($result['session_id'] > 0) {
@@ -204,6 +211,53 @@ function switchToUnlimited($pdo) {
         } else {
             echo json_encode(['success' => false, 'message' => 'فشل في التحويل']);
         }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function addDevice($pdo) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $device_name = $input['device_name'] ?? '';
+    
+    if (empty($device_name)) {
+        echo json_encode(['success' => false, 'message' => 'اسم الجهاز مطلوب']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("CALL AddDevice(?)");
+        $stmt->execute([$device_name]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        if ($result['device_id'] > 0) {
+            echo json_encode(['success' => true, 'device_id' => $result['device_id'], 'message' => 'تم إضافة الجهاز بنجاح']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'فشل في إضافة الجهاز']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function deleteDevice($pdo) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $device_id = $input['device_id'] ?? 0;
+    
+    if ($device_id <= 0) {
+        echo json_encode(['success' => false, 'message' => 'معرف الجهاز غير صحيح']);
+        return;
+    }
+    
+    try {
+        $stmt = $pdo->prepare("CALL DeleteDevice(?)");
+        $stmt->execute([$device_id]);
+        $result = $stmt->fetch(PDO::FETCH_ASSOC);
+        
+        echo json_encode([
+            'success' => $result['success'] == 1,
+            'message' => $result['message']
+        ]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
     }
