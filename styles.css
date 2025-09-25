@@ -380,30 +380,355 @@ body {
     margin-top: 20px;
 }
 
-/* نافذة انتهاء الوقت */
-.time-up-modal {
-    max-width: 600px;
+/* نظام Toast للإشعارات */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-width: 400px;
 }
 
-.time-up-content {
-    text-align: center;
+.toast {
+    background: white;
+    border-radius: 12px;
+    padding: 20px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+    border-left: 5px solid #dc3545;
+    position: relative;
+    transform: translateX(100%);
+    opacity: 0;
+    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    min-width: 300px;
+    max-width: 400px;
+    direction: rtl;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.time-up-content p {
+.toast.show {
+    transform: translateX(0);
+    opacity: 1;
+}
+
+.toast.hide {
+    transform: translateX(100%);
+    opacity: 0;
+}
+
+.toast:hover {
+    transform: translateX(-5px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.2);
+}
+
+.toast.success {
+    border-left-color: #28a745;
+}
+
+.toast.warning {
+    border-left-color: #ffc107;
+}
+
+.toast.info {
+    border-left-color: #17a2b8;
+}
+
+.toast.danger {
+    border-left-color: #dc3545;
+}
+
+.toast-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+
+.toast-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #333;
+    margin: 0;
+}
+
+.toast-close {
+    background: none;
+    border: none;
     font-size: 1.2rem;
-    margin-bottom: 30px;
+    cursor: pointer;
+    color: #666;
+    padding: 4px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.toast-close:hover {
+    background: rgba(0, 0, 0, 0.1);
     color: #333;
 }
 
-.time-up-actions {
+.toast-body {
+    color: #555;
+    line-height: 1.5;
+    margin-bottom: 15px;
+}
+
+.toast-actions {
     display: flex;
-    gap: 15px;
-    justify-content: center;
+    gap: 8px;
+    justify-content: flex-end;
     flex-wrap: wrap;
 }
 
-.time-up-actions .btn {
-    min-width: 150px;
+.toast-actions .btn {
+    padding: 6px 12px;
+    font-size: 0.85rem;
+    border-radius: 6px;
+    min-width: auto;
+}
+
+.toast-actions .btn i {
+    font-size: 0.75rem;
+}
+
+/* تأثيرات خاصة لـ Toast */
+@keyframes toastSlideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+@keyframes toastSlideOut {
+    from {
+        transform: translateX(0);
+        opacity: 1;
+    }
+    to {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+}
+
+.toast.auto-hide {
+    animation: toastSlideIn 0.4s ease-out;
+}
+
+.toast.auto-hide.hide {
+    animation: toastSlideOut 0.3s ease-in;
+}
+
+/* تحسينات للثيم الداكن */
+[data-theme="dark"] .toast {
+    background: #2d3748;
+    color: #e2e8f0;
+    border-left-color: #dc3545;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .toast.success {
+    border-left-color: #28a745;
+}
+
+[data-theme="dark"] .toast.warning {
+    border-left-color: #ffc107;
+}
+
+[data-theme="dark"] .toast.info {
+    border-left-color: #17a2b8;
+}
+
+[data-theme="dark"] .toast.danger {
+    border-left-color: #dc3545;
+}
+
+[data-theme="dark"] .toast-title {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .toast-body {
+    color: #a0aec0;
+}
+
+[data-theme="dark"] .toast-close {
+    color: #a0aec0;
+}
+
+[data-theme="dark"] .toast-close:hover {
+    background: rgba(255, 255, 255, 0.1);
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .toast:hover {
+    transform: translateX(-5px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+
+/* أنماط حقول الإدخال في Toast */
+.toast-input {
+    width: 100%;
+    padding: 8px 12px;
+    margin: 10px 0;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    background: white;
+    color: #333;
+}
+
+/* أنماط نافذة تسجيل دخول الإدارة */
+.admin-login-modal {
+    max-width: 450px;
+    text-align: center;
+}
+
+.admin-login-modal .modal-header {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border-radius: 15px 15px 0 0;
+    margin: -30px -30px 30px -30px;
+    padding: 25px 30px;
+}
+
+.admin-login-modal .modal-header h3 {
+    color: white;
+    margin: 0;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.admin-login-modal .modal-header h3 i {
+    font-size: 1.2rem;
+}
+
+.admin-login-modal .form-group {
+    margin-bottom: 25px;
+    text-align: right;
+}
+
+.admin-login-modal .form-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 1.1rem;
+}
+
+.admin-login-modal .form-group label i {
+    color: #667eea;
+    font-size: 1rem;
+}
+
+.admin-login-modal input[type="password"] {
+    width: 100%;
+    padding: 15px 20px;
+    border: 2px solid #e1e5e9;
+    border-radius: 12px;
+    font-size: 1.1rem;
+    transition: all 0.3s ease;
+    background: #f8f9fa;
+    text-align: center;
+    letter-spacing: 2px;
+}
+
+.admin-login-modal input[type="password"]:focus {
+    outline: none;
+    border-color: #667eea;
+    background: white;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+    transform: translateY(-2px);
+}
+
+.admin-login-modal .form-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+    margin-top: 30px;
+}
+
+.admin-login-modal .btn {
+    padding: 12px 25px;
+    font-size: 1rem;
+    border-radius: 8px;
+    min-width: 120px;
+    transition: all 0.3s ease;
+}
+
+.admin-login-modal .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+/* تحسينات للثيم الداكن */
+[data-theme="dark"] .admin-login-modal .modal-header {
+    background: linear-gradient(135deg, #4a5568, #2d3748);
+}
+
+[data-theme="dark"] .admin-login-modal .form-group label {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .admin-login-modal input[type="password"] {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .admin-login-modal input[type="password"]:focus {
+    background: #2d3748;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.3);
+}
+
+/* تأثير الاهتزاز لكلمة المرور الخاطئة */
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    10%, 30%, 50%, 70%, 90% { transform: translateX(-5px); }
+    20%, 40%, 60%, 80% { transform: translateX(5px); }
+}
+
+.admin-login-modal input[type="password"].error {
+    border-color: #dc3545;
+    background: #fff5f5;
+    animation: shake 0.5s ease-in-out;
+}
+
+[data-theme="dark"] .admin-login-modal input[type="password"].error {
+    border-color: #dc3545;
+    background: #4a1a1a;
+}
+
+.toast-input:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2);
+}
+
+[data-theme="dark"] .toast-input {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .toast-input:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
 }
 
 /* نافذة التقارير */

@@ -1,3 +1,451 @@
+// نظام Toast للإشعارات
+class Toast {
+    constructor() {
+        this.container = document.getElementById('toastContainer');
+        this.toasts = new Map();
+        this.timeUpToasts = new Map(); // إدارة خاصة لإشعارات انتهاء الوقت
+        
+        // إضافة دعم للـ Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.hideAll();
+            }
+        });
+    }
+
+    show(options) {
+        const {
+            title = 'إشعار',
+            message = '',
+            type = 'info',
+            duration = 5000,
+            actions = [],
+            icon = null
+        } = options;
+
+        const toastId = Date.now() + Math.random();
+        const toast = this.createToast(toastId, title, message, type, actions, icon);
+        
+        this.container.appendChild(toast);
+        this.toasts.set(toastId, toast);
+
+        // إظهار Toast مع تأثير
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+
+        // إخفاء تلقائي
+        if (duration > 0) {
+            setTimeout(() => {
+                this.hide(toastId);
+            }, duration);
+        }
+
+        return toastId;
+    }
+
+    createToast(id, title, message, type, actions, icon) {
+        const toast = document.createElement('div');
+        toast.className = `toast ${type}`;
+        toast.dataset.toastId = id;
+
+        const iconElement = icon ? `<i class="${icon}"></i>` : this.getDefaultIcon(type);
+        
+        toast.innerHTML = `
+            <div class="toast-header">
+                <h4 class="toast-title">
+                    ${iconElement}
+                    ${title}
+                </h4>
+                <button class="toast-close" onclick="toast.hide(${id})">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="toast-body">
+                ${message}
+            </div>
+            ${actions.length > 0 ? `
+                <div class="toast-actions">
+                    ${actions.map(action => `
+                        <button class="btn ${action.class || 'btn-primary'}" 
+                                onclick="${action.onclick}">
+                            ${action.icon ? `<i class="${action.icon}"></i>` : ''}
+                            ${action.text}
+                        </button>
+                    `).join('')}
+                </div>
+            ` : ''}
+        `;
+
+        return toast;
+    }
+
+    getDefaultIcon(type) {
+        const icons = {
+            success: '<i class="fas fa-check-circle"></i>',
+            warning: '<i class="fas fa-exclamation-triangle"></i>',
+            danger: '<i class="fas fa-times-circle"></i>',
+            info: '<i class="fas fa-info-circle"></i>'
+        };
+        return icons[type] || icons.info;
+    }
+
+    hide(toastId) {
+        const toast = this.toasts.get(toastId);
+        if (toast) {
+            toast.classList.add('hide');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+                this.toasts.delete(toastId);
+            }, 300);
+        }
+    }
+
+    hideAll() {
+        this.toasts.forEach((toast, id) => {
+            this.hide(id);
+        });
+    }
+
+    // طرق مساعدة للإشعارات الشائعة
+    success(message, title = 'نجح العملية', options = {}) {
+        return this.show({
+            title,
+            message,
+            type: 'success',
+            icon: 'fas fa-check-circle',
+            duration: 4000,
+            ...options
+        });
+    }
+
+    error(message, title = 'خطأ', options = {}) {
+        return this.show({
+            title,
+            message,
+            type: 'danger',
+            icon: 'fas fa-times-circle',
+            duration: 5000,
+            ...options
+        });
+    }
+
+    warning(message, title = 'تحذير', options = {}) {
+        return this.show({
+            title,
+            message,
+            type: 'warning',
+            icon: 'fas fa-exclamation-triangle',
+            duration: 5000,
+            ...options
+        });
+    }
+
+    info(message, title = 'معلومات', options = {}) {
+        return this.show({
+            title,
+            message,
+            type: 'info',
+            icon: 'fas fa-info-circle',
+            duration: 4000,
+            ...options
+        });
+    }
+
+    // دالة لاستبدال alert()
+    alert(message, title = 'تنبيه', options = {}) {
+        return this.info(message, title, {
+            duration: 4000,
+            ...options
+        });
+    }
+
+    // دالة لاستبدال confirm() - تعرض Toast مع أزرار تأكيد
+    confirm(message, title = 'تأكيد', onConfirm = null, onCancel = null) {
+        const toastId = this.warning(message, title, {
+            duration: 0, // لا يختفي تلقائياً
+            actions: [
+                {
+                    text: 'تأكيد',
+                    class: 'btn-success',
+                    icon: 'fas fa-check',
+                    onclick: `toast.confirmCallback(${toastId}, true)`
+                },
+                {
+                    text: 'إلغاء',
+                    class: 'btn-secondary',
+                    icon: 'fas fa-times',
+                    onclick: `toast.confirmCallback(${toastId}, false)`
+                }
+            ]
+        });
+
+        // حفظ callbacks
+        this.confirmCallbacks = this.confirmCallbacks || new Map();
+        this.confirmCallbacks.set(toastId, { onConfirm, onCancel });
+
+        return toastId;
+    }
+
+    // دالة callback للـ confirm
+    confirmCallback(toastId, confirmed) {
+        const callbacks = this.confirmCallbacks?.get(toastId);
+        if (callbacks) {
+            if (confirmed && callbacks.onConfirm) {
+                callbacks.onConfirm();
+            } else if (!confirmed && callbacks.onCancel) {
+                callbacks.onCancel();
+            }
+            this.confirmCallbacks.delete(toastId);
+        }
+        this.hide(toastId);
+    }
+
+    // دالة لاستبدال prompt() - تعرض Toast مع حقل إدخال
+    prompt(message, title = 'إدخال', defaultValue = '', onConfirm = null, onCancel = null) {
+        const inputId = 'toast-input-' + Date.now();
+        const toastId = this.info(message, title, {
+            duration: 0, // لا يختفي تلقائياً
+            actions: [
+                {
+                    text: 'تأكيد',
+                    class: 'btn-success',
+                    icon: 'fas fa-check',
+                    onclick: `toast.promptCallback('${inputId}', ${toastId}, true)`
+                },
+                {
+                    text: 'إلغاء',
+                    class: 'btn-secondary',
+                    icon: 'fas fa-times',
+                    onclick: `toast.promptCallback('${inputId}', ${toastId}, false)`
+                }
+            ]
+        });
+
+        // إضافة حقل الإدخال
+        setTimeout(() => {
+            const toast = this.toasts.get(toastId);
+            if (toast) {
+                const body = toast.querySelector('.toast-body');
+                const input = document.createElement('input');
+                input.type = 'text';
+                input.id = inputId;
+                input.value = defaultValue;
+                input.className = 'toast-input';
+                input.style.cssText = 'width: 100%; padding: 8px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px;';
+                
+                // إضافة دعم للـ Enter key
+                input.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        this.promptCallback(inputId, toastId, true);
+                    }
+                });
+                
+                body.appendChild(input);
+                input.focus();
+                input.select();
+            }
+        }, 100);
+
+        // حفظ callbacks
+        this.promptCallbacks = this.promptCallbacks || new Map();
+        this.promptCallbacks.set(toastId, { onConfirm, onCancel });
+
+        return toastId;
+    }
+
+    // دالة callback للـ prompt
+    promptCallback(inputId, toastId, confirmed) {
+        const callbacks = this.promptCallbacks?.get(toastId);
+        if (callbacks) {
+            if (confirmed && callbacks.onConfirm) {
+                const input = document.getElementById(inputId);
+                const value = input ? input.value : '';
+                callbacks.onConfirm(value);
+            } else if (!confirmed && callbacks.onCancel) {
+                callbacks.onCancel();
+            }
+            this.promptCallbacks.delete(toastId);
+        }
+        this.hide(toastId);
+    }
+
+    // دالة خاصة لإشعارات انتهاء الوقت
+    showTimeUpToast(deviceName, sessionId) {
+        // إخفاء أي إشعار سابق لنفس الجلسة
+        if (this.timeUpToasts.has(sessionId)) {
+            this.hide(this.timeUpToasts.get(sessionId));
+        }
+
+        const toastId = this.warning(
+            `انتهى وقت اللعب على الجهاز ${deviceName}`,
+            'انتهاء الوقت',
+            {
+                duration: 0, // لا يختفي تلقائياً
+                actions: [
+                    {
+                        text: 'إيقاف الجلسة',
+                        class: 'btn-danger',
+                        icon: 'fas fa-stop',
+                        onclick: `gamingCenter.stopSession(${sessionId})`
+                    },
+                    {
+                        text: 'تمديد الوقت',
+                        class: 'btn-warning',
+                        icon: 'fas fa-clock',
+                        onclick: `gamingCenter.showExtendTimeModal(${sessionId})`
+                    },
+                    {
+                        text: 'وقت مفتوح',
+                        class: 'btn-success',
+                        icon: 'fas fa-infinity',
+                        onclick: `gamingCenter.switchToUnlimited(${sessionId})`
+                    }
+                ]
+            }
+        );
+
+        // حفظ معرف Toast للجلسة
+        this.timeUpToasts.set(sessionId, toastId);
+        return toastId;
+    }
+
+    // إخفاء إشعار انتهاء الوقت لجلسة محددة
+    hideTimeUpToast(sessionId) {
+        if (this.timeUpToasts.has(sessionId)) {
+            this.hide(this.timeUpToasts.get(sessionId));
+            this.timeUpToasts.delete(sessionId);
+        }
+    }
+
+    // إخفاء جميع إشعارات انتهاء الوقت
+    hideAllTimeUpToasts() {
+        this.timeUpToasts.forEach((toastId, sessionId) => {
+            this.hide(toastId);
+        });
+        this.timeUpToasts.clear();
+    }
+}
+
+// إنشاء مثيل عام للـ Toast
+const toast = new Toast();
+
+// دالة لاختبار نظام Toast (يمكن إزالتها لاحقاً)
+function testToastSystem() {
+    console.log('اختبار نظام Toast...');
+    
+    // اختبار أنواع مختلفة من Toast
+    toast.info('هذا إشعار معلوماتي للاختبار');
+    
+    setTimeout(() => {
+        toast.success('هذا إشعار نجاح للاختبار');
+    }, 1000);
+    
+    setTimeout(() => {
+        toast.warning('هذا إشعار تحذيري للاختبار');
+    }, 2000);
+    
+    setTimeout(() => {
+        toast.error('هذا إشعار خطأ للاختبار');
+    }, 3000);
+    
+    setTimeout(() => {
+        toast.confirm('هل تريد اختبار تأكيد؟', 'اختبار التأكيد', 
+            () => toast.success('تم التأكيد!'),
+            () => toast.info('تم الإلغاء')
+        );
+    }, 4000);
+    
+    setTimeout(() => {
+        toast.prompt('أدخل اسمك للاختبار:', 'اختبار الإدخال', 'المستخدم', 
+            (value) => toast.success(`مرحباً ${value}!`),
+            () => toast.info('تم إلغاء الإدخال')
+        );
+    }, 5000);
+}
+
+// دالة لاختبار إشعارات انتهاء الوقت
+function testTimeUpToasts() {
+    console.log('اختبار إشعارات انتهاء الوقت...');
+    
+    // محاكاة جلسات متعددة تنتهي
+    toast.showTimeUpToast('PlayStation 1', 1001);
+    
+    setTimeout(() => {
+        toast.showTimeUpToast('PlayStation 2', 1002);
+    }, 2000);
+    
+    setTimeout(() => {
+        toast.showTimeUpToast('PlayStation 3', 1003);
+    }, 4000);
+    
+    // اختبار إخفاء جلسة محددة
+    setTimeout(() => {
+        toast.hideTimeUpToast(1002);
+        console.log('تم إخفاء إشعار PlayStation 2');
+    }, 6000);
+    
+    // اختبار إخفاء جميع الإشعارات
+    setTimeout(() => {
+        toast.hideAllTimeUpToasts();
+        console.log('تم إخفاء جميع إشعارات انتهاء الوقت');
+    }, 8000);
+}
+
+// دالة لاختبار زر الإدارة
+function testAdminButton() {
+    console.log('اختبار زر الإدارة...');
+    
+    // محاكاة الضغط على زر الإدارة
+    const adminBtn = document.getElementById('manageDevicesBtn');
+    if (adminBtn) {
+        adminBtn.click();
+        console.log('تم الضغط على زر الإدارة');
+    } else {
+        console.error('زر الإدارة غير موجود');
+    }
+}
+
+// دالة لاختبار تحويل الجلسة
+function testSessionConversion() {
+    console.log('اختبار تحويل الجلسة...');
+    
+    // محاكاة جلسة تنتهي
+    toast.showTimeUpToast('PlayStation Test', 9999);
+    
+    // محاكاة الضغط على زر "وقت مفتوح"
+    setTimeout(() => {
+        console.log('محاكاة تحويل الجلسة إلى وقت مفتوح...');
+        // هذا سيتم اختباره يدوياً من خلال الضغط على الزر في Toast
+    }, 2000);
+}
+
+// دالة لاختبار نافذة تسجيل دخول الإدارة
+function testAdminLoginPopup() {
+    console.log('اختبار نافذة تسجيل دخول الإدارة...');
+    
+    // إظهار نافذة تسجيل دخول الإدارة
+    if (window.gamingCenter) {
+        window.gamingCenter.showAdminLoginModal();
+    } else {
+        console.error('gamingCenter غير متاح');
+    }
+}
+
+// دالة لاختبار عملية حذف التقارير
+function testClearReports() {
+    console.log('اختبار عملية حذف التقارير...');
+    
+    // إظهار نافذة حذف التقارير
+    if (window.gamingCenter) {
+        window.gamingCenter.showClearReportsModal();
+    } else {
+        console.error('gamingCenter غير متاح');
+    }
+}
+
 // إدارة صالة الألعاب - PlayStation 4 (محسن مع SQL)
 class GamingCenterManager {
     constructor() {
@@ -81,17 +529,30 @@ class GamingCenterManager {
             this.toggleTimeLimitInput(e.target.value);
         });
 
-        // نافذة انتهاء الوقت
-        document.getElementById('stopSession').addEventListener('click', () => {
-            this.stopSession();
+        // تم إزالة معالجات نافذة انتهاء الوقت - تم استبدالها بـ Toast
+
+        // نافذة تسجيل دخول الإدارة
+        document.getElementById('closeAdminLoginModal').addEventListener('click', () => {
+            this.hideAdminLoginModal();
         });
 
-        document.getElementById('extendTime').addEventListener('click', () => {
-            this.extendSession();
+        document.getElementById('cancelAdminLogin').addEventListener('click', () => {
+            this.hideAdminLoginModal();
         });
 
-        document.getElementById('switchToUnlimited').addEventListener('click', () => {
-            this.switchToUnlimited();
+        document.getElementById('adminLoginForm').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const password = document.getElementById('adminPasswordInput').value;
+            this.handleAdminLogin(password);
+        });
+
+        // دعم Enter key في حقل كلمة المرور
+        document.getElementById('adminPasswordInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const password = e.target.value;
+                this.handleAdminLogin(password);
+            }
         });
 
         // نافذة إدارة الأجهزة
@@ -149,7 +610,9 @@ class GamingCenterManager {
         // إغلاق النوافذ عند النقر خارجها
         window.addEventListener('click', (e) => {
             if (e.target.classList.contains('modal')) {
-                if (e.target.id === 'clearReportsModal') {
+                if (e.target.id === 'adminLoginModal') {
+                    this.hideAdminLoginModal();
+                } else if (e.target.id === 'clearReportsModal') {
                     this.hideClearReportsModal();
                 } else {
                     this.hideAllModals();
@@ -289,7 +752,7 @@ class GamingCenterManager {
                     this.showMainScreen();
                     await this.loadData();
                 } else {
-                    alert(result.message || 'اسم المستخدم أو كلمة المرور غير صحيحة');
+                    toast.error(result.message || 'اسم المستخدم أو كلمة المرور غير صحيحة');
                 }
             } catch (error) {
                 console.error('خطأ في تسجيل الدخول:', error);
@@ -308,7 +771,7 @@ class GamingCenterManager {
             this.loadLocalData();
             this.updateUI();
         } else {
-            alert('اسم المستخدم أو كلمة المرور غير صحيحة');
+            toast.error('اسم المستخدم أو كلمة المرور غير صحيحة');
         }
     }
 
@@ -367,14 +830,55 @@ class GamingCenterManager {
     showDevicesModal() {
         // طلب كلمة المرور للإدارة
         if (!this.isAdminAuthenticated) {
-            const password = prompt('أدخل كلمة مرور الإدارة:');
-            if (password !== this.adminPassword) {
-                alert('كلمة المرور غير صحيحة');
-                return;
-            }
-            this.isAdminAuthenticated = true;
+            this.showAdminLoginModal();
+            return;
         }
         
+        this.openDevicesModal();
+    }
+
+    showAdminLoginModal() {
+        // إخفاء أي نوافذ أخرى مفتوحة
+        this.hideAllModals();
+        
+        // إظهار نافذة تسجيل دخول الإدارة
+        document.getElementById('adminLoginModal').classList.add('show');
+        
+        // التركيز على حقل كلمة المرور
+        setTimeout(() => {
+            document.getElementById('adminPasswordInput').focus();
+        }, 100);
+    }
+
+    hideAdminLoginModal() {
+        document.getElementById('adminLoginModal').classList.remove('show');
+        // مسح حقل كلمة المرور
+        document.getElementById('adminPasswordInput').value = '';
+    }
+
+    handleAdminLogin(password) {
+        if (password === this.adminPassword) {
+            this.isAdminAuthenticated = true;
+            this.hideAdminLoginModal();
+            this.openDevicesModal();
+            toast.success('تم تسجيل الدخول بنجاح');
+        } else {
+            toast.error('كلمة المرور غير صحيحة');
+            // إضافة تأثير اهتزاز للحقل
+            const passwordInput = document.getElementById('adminPasswordInput');
+            passwordInput.classList.add('error');
+            passwordInput.style.animation = 'shake 0.5s ease-in-out';
+            
+            setTimeout(() => {
+                passwordInput.classList.remove('error');
+                passwordInput.style.animation = '';
+                passwordInput.focus();
+                passwordInput.select();
+            }, 500);
+        }
+    }
+
+    openDevicesModal() {
         document.getElementById('devicesModal').classList.add('show');
         this.loadDevicesList();
         this.loadPricingSettings();
@@ -390,26 +894,151 @@ class GamingCenterManager {
         });
     }
 
-    showTimeUpModal(deviceName, sessionId) {
-        // تجنب إظهار النافذة عدة مرات لنفس الجلسة
-        if (this.currentTimeUpSessionId === sessionId) {
-            return;
-        }
-        
-        // إخفاء أي نوافذ أخرى مفتوحة أولاً
-        this.hideAllModals();
-        
-        this.currentTimeUpSessionId = sessionId;
-        document.getElementById('timeUpDevice').textContent = deviceName;
-        document.getElementById('timeUpModal').classList.add('show');
+    showTimeUpToast(deviceName, sessionId) {
+        // استخدام النظام الجديد لإدارة إشعارات انتهاء الوقت
+        const toastId = toast.showTimeUpToast(deviceName, sessionId);
         
         // إضافة تأثير صوتي (اختياري)
         this.playTimeUpSound();
+        
+        return toastId;
     }
 
-    hideTimeUpModal() {
-        document.getElementById('timeUpModal').classList.remove('show');
-        this.currentTimeUpSessionId = null;
+    hideTimeUpToast(sessionId = null) {
+        if (sessionId) {
+            // إخفاء Toast لجلسة محددة
+            toast.hideTimeUpToast(sessionId);
+        } else {
+            // إخفاء جميع إشعارات انتهاء الوقت
+            toast.hideAllTimeUpToasts();
+        }
+    }
+
+    // دالة لإيقاف الجلسة من Toast
+    stopSession(sessionId) {
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (session) {
+            this.endSession(sessionId);
+            toast.hideTimeUpToast(sessionId);
+            toast.success('تم إيقاف الجلسة بنجاح');
+        }
+    }
+
+    // دالة لإظهار نافذة تمديد الوقت
+    showExtendTimeModal(sessionId) {
+        // إخفاء Toast انتهاء الوقت أولاً
+        toast.hideTimeUpToast(sessionId);
+        
+        // إظهار نافذة تمديد الوقت باستخدام Toast
+        toast.prompt('كم دقيقة تريد إضافة؟', 'تمديد الوقت', '30', 
+            async (extendTime) => {
+                if (extendTime && !isNaN(extendTime) && extendTime > 0) {
+                    await this.extendSessionTime(sessionId, parseInt(extendTime));
+                }
+            },
+            () => {
+                // إعادة إظهار Toast انتهاء الوقت إذا تم الإلغاء
+                const session = this.sessions.find(s => s.id === sessionId);
+                if (session) {
+                    const device = this.devices.find(d => d.id === session.device_id);
+                    if (device) {
+                        this.showTimeUpToast(device.name, sessionId);
+                    }
+                }
+            }
+        );
+    }
+
+    // دالة للتحويل إلى وقت مفتوح
+    async switchToUnlimited(sessionId) {
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (session) {
+            // حفظ البيانات الأصلية
+            const originalType = session.session_type;
+            const originalTimeLimit = session.time_limit;
+            
+            try {
+                // تحديث البيانات محلياً
+                session.session_type = 'unlimited';
+                session.time_limit = null;
+                
+                // محاولة تحديث قاعدة البيانات
+                if (this.isOnline) {
+                    await this.updateSessionInDatabase(session);
+                }
+                
+                // إخفاء Toast وإظهار رسالة النجاح
+                toast.hideTimeUpToast(sessionId);
+                toast.success('تم التحويل إلى وقت مفتوح بنجاح');
+                this.updateDevicesGrid();
+                
+            } catch (error) {
+                // في حالة فشل التحديث، إعادة البيانات الأصلية
+                session.session_type = originalType;
+                session.time_limit = originalTimeLimit;
+                console.error('فشل في تحديث الجلسة:', error);
+                // لا نعرض رسالة خطأ إضافية لأن updateSessionInDatabase تعرضها بالفعل
+            }
+        }
+    }
+
+    // دالة لتمديد وقت الجلسة
+    async extendSessionTime(sessionId, additionalMinutes) {
+        const session = this.sessions.find(s => s.id === sessionId);
+        if (session) {
+            // حفظ الوقت الأصلي
+            const originalTimeLimit = session.time_limit;
+            
+            try {
+                // تحديث الوقت محلياً
+                session.time_limit += additionalMinutes;
+                
+                // محاولة تحديث قاعدة البيانات
+                if (this.isOnline) {
+                    await this.updateSessionInDatabase(session);
+                }
+                
+                toast.success(`تم تمديد الوقت بـ ${additionalMinutes} دقيقة`);
+                this.updateDevicesGrid();
+                
+            } catch (error) {
+                // في حالة فشل التحديث، إعادة الوقت الأصلي
+                session.time_limit = originalTimeLimit;
+                console.error('فشل في تحديث الجلسة:', error);
+                // لا نعرض رسالة خطأ إضافية لأن updateSessionInDatabase تعرضها بالفعل
+            }
+        }
+    }
+
+    // دالة لتحديث الجلسة في قاعدة البيانات
+    async updateSessionInDatabase(session) {
+        try {
+            const response = await fetch('api.php', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    action: 'update_session',
+                    session_id: session.id,
+                    session_type: session.session_type,
+                    time_limit: session.time_limit
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('فشل في تحديث الجلسة');
+            }
+
+            const result = await response.json();
+            if (!result.success) {
+                throw new Error(result.message || 'فشل في تحديث الجلسة');
+            }
+        } catch (error) {
+            console.error('خطأ في تحديث الجلسة:', error);
+            toast.error('فشل في تحديث الجلسة');
+            throw error; // إعادة رمي الخطأ للتعامل معه في الدالة المستدعية
+        }
     }
 
     playTimeUpSound() {
@@ -470,12 +1099,12 @@ class GamingCenterManager {
         const timeLimit = parseInt(document.getElementById('timeLimit').value) || null;
 
         if (!deviceId || !playerName || !gameMode || !sessionType) {
-            alert('يرجى ملء جميع الحقول المطلوبة');
+            toast.warning('يرجى ملء جميع الحقول المطلوبة');
             return;
         }
 
         if (sessionType === 'limited' && (!timeLimit || timeLimit <= 0)) {
-            alert('يرجى إدخال مدة صحيحة للوقت المحدد');
+            toast.warning('يرجى إدخال مدة صحيحة للوقت المحدد');
             return;
         }
 
@@ -500,9 +1129,9 @@ class GamingCenterManager {
                 if (result.success) {
                     this.hideSessionModal();
                     await this.loadData();
-                    alert(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
+                    toast.success(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
                 } else {
-                    alert(result.message || 'فشل في بدء الجلسة');
+                    toast.error(result.message || 'فشل في بدء الجلسة');
                 }
             } catch (error) {
                 console.error('خطأ في بدء الجلسة:', error);
@@ -517,7 +1146,7 @@ class GamingCenterManager {
     startLocalSession(deviceId, playerName, sessionType, timeLimit, gameMode) {
         const device = this.devices.find(d => d.id === deviceId);
         if (device.status !== 'available') {
-            alert('هذا الجهاز غير متاح حالياً');
+            toast.warning('هذا الجهاز غير متاح حالياً');
             return;
         }
 
@@ -543,7 +1172,11 @@ class GamingCenterManager {
         this.updateSpecificDeviceCard(device);
         this.updateStats();
         this.saveLocalData();
-        alert(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
+        
+        // إخفاء أي إشعارات انتهاء وقت سابقة للجهاز
+        toast.hideTimeUpToast(deviceId);
+        
+        toast.success(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
     }
 
     async endSession(sessionId) {
@@ -561,9 +1194,9 @@ class GamingCenterManager {
                 
                 if (result.success) {
                     await this.loadData();
-                    alert(`انتهت الجلسة. التكلفة: ${result.total_cost} ليرة سورية`);
+                    toast.success(`انتهت الجلسة. التكلفة: ${result.total_cost} ليرة سورية`);
                 } else {
-                    alert(result.message || 'فشل في إنهاء الجلسة');
+                    toast.error(result.message || 'فشل في إنهاء الجلسة');
                 }
             } catch (error) {
                 console.error('خطأ في إنهاء الجلسة:', error);
@@ -600,7 +1233,11 @@ class GamingCenterManager {
         this.updateSpecificDeviceCard(device);
         this.updateStats();
         this.saveLocalData();
-        alert(`انتهت الجلسة. التكلفة: ${session.total_cost} ليرة سورية`);
+        
+        // إخفاء إشعار انتهاء الوقت إذا كان موجوداً
+        toast.hideTimeUpToast(sessionId);
+        
+        toast.success(`انتهت الجلسة. التكلفة: ${session.total_cost} ليرة سورية`);
     }
 
     calculateCost(minutes, gameMode = 'duo') {
@@ -690,15 +1327,14 @@ class GamingCenterManager {
                             }
                         }
                         
-                        // فحص انتهاء الوقت وإظهار النافذة (مع تحقق إضافي)
+                        // فحص انتهاء الوقت وإظهار الإشعار (مع تحقق إضافي)
                         // استخدام الوقت المحدد الحالي بدلاً من الوقت الأصلي
                         if (elapsedMinutes >= session.time_limit && 
-                            !this.currentTimeUpSessionId && 
                             session.session_type === 'limited' &&
-                            !document.getElementById('timeUpModal').classList.contains('show')) {
+                            !toast.timeUpToasts.has(session.id)) {
                             const device = this.devices.find(d => d.id === session.device_id);
                             if (device) {
-                                this.showTimeUpModal(device.name, session.id);
+                                this.showTimeUpToast(device.name, session.id);
                             }
                         }
                     }
@@ -780,8 +1416,8 @@ class GamingCenterManager {
                 // إضافة كلاس للتنبيه عند انتهاء الوقت
                 if (timeRemaining <= 0) {
                     timeUpClass = 'time-up';
-                    // إظهار نافذة انتهاء الوقت
-                    this.showTimeUpModal(device.name, session.id);
+                    // إظهار إشعار انتهاء الوقت
+                    this.showTimeUpToast(device.name, session.id);
                 }
             }
             
@@ -935,7 +1571,7 @@ class GamingCenterManager {
     async generateReport() {
         const selectedDate = document.getElementById('reportDate').value;
         if (!selectedDate) {
-            alert('يرجى اختيار تاريخ');
+            toast.warning('يرجى اختيار تاريخ');
             return;
         }
 
@@ -1073,130 +1709,10 @@ class GamingCenterManager {
         localStorage.setItem('gamingCenterData', JSON.stringify(data));
     }
 
-    // دوال إضافية للتعامل مع انتهاء الوقت
-    stopSession() {
-        const activeSession = this.getActiveSessionFromTimeUp();
-        if (activeSession) {
-            this.endSession(activeSession.id);
-            this.hideTimeUpModal();
-            // إعادة تعيين متغير التتبع
-            this.currentTimeUpSessionId = null;
-        }
-    }
+    // تم إزالة الدوال المكررة القديمة - تم استبدالها بدوال Toast الجديدة
 
-    async extendSession() {
-        const activeSession = this.getActiveSessionFromTimeUp();
-        if (activeSession) {
-            let extension = prompt('كم دقيقة إضافية تريد إضافة؟', '30');
-            
-            // التحقق من صحة الإدخال وإعادة الطلب إذا لزم الأمر
-            while (!extension || isNaN(extension) || extension <= 0) {
-                if (extension === null) {
-                    return; // المستخدم ألغى العملية
-                }
-                extension = prompt('يرجى إدخال عدد صحيح أكبر من الصفر:\nكم دقيقة إضافية تريد إضافة؟', '30');
-            }
-            
-            if (extension && !isNaN(extension) && extension > 0) {
-                if (this.isOnline) {
-                    try {
-                        const response = await fetch(`${this.apiUrl}?action=extend_session`, {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json',
-                            },
-                            body: JSON.stringify({
-                                session_id: activeSession.id,
-                                additional_minutes: parseInt(extension)
-                            })
-                        });
 
-                        const result = await response.json();
-                        if (result.success) {
-                            this.hideTimeUpModal();
-                            alert(`تم تمديد الوقت بمقدار ${extension} دقيقة`);
-                        } else {
-                            alert(result.message || 'فشل في تمديد الوقت');
-                        }
-                    } catch (error) {
-                        console.error('خطأ في تمديد الوقت:', error);
-                        alert('خطأ في الاتصال بالخادم');
-                    }
-                } else {
-                    // تحديث الوقت المحدد في الجلسة
-                    activeSession.time_limit += parseInt(extension);
-                    
-                    // حفظ البيانات المحلية
-                    this.saveLocalData();
-                    
-                    // إعادة تعيين متغير التتبع لتجنب التضارب
-                    this.currentTimeUpSessionId = null;
-                    
-                    // إخفاء النافذة
-                    this.hideTimeUpModal();
-                    
-                    // تحديث العدادات فقط بدلاً من إعادة رسم الصفحة
-                    this.updateActiveSessionTimers();
-                    
-                    alert(`تم تمديد الوقت بمقدار ${extension} دقيقة`);
-                }
-            }
-        }
-    }
 
-    async switchToUnlimited() {
-        const activeSession = this.getActiveSessionFromTimeUp();
-        if (activeSession) {
-            if (this.isOnline) {
-                try {
-                    const response = await fetch(`${this.apiUrl}?action=switch_to_unlimited`, {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            session_id: activeSession.id
-                        })
-                    });
-
-                    const result = await response.json();
-                    if (result.success) {
-                        this.hideTimeUpModal();
-                        alert('تم التحويل إلى وقت مفتوح');
-                    } else {
-                        alert(result.message || 'فشل في التحويل');
-                    }
-                } catch (error) {
-                    console.error('خطأ في التحويل:', error);
-                    alert('خطأ في الاتصال بالخادم');
-                }
-            } else {
-                // تحديث نوع الجلسة
-                activeSession.session_type = 'unlimited';
-                activeSession.time_limit = null;
-                
-                // حفظ البيانات المحلية
-                this.saveLocalData();
-                
-                // إعادة تعيين متغير التتبع لتجنب التضارب
-                this.currentTimeUpSessionId = null;
-                
-                // إخفاء النافذة
-                this.hideTimeUpModal();
-                
-                // تحديث العدادات فقط بدلاً من إعادة رسم الصفحة
-                this.updateActiveSessionTimers();
-                
-                alert('تم التحويل إلى وقت مفتوح');
-            }
-        }
-    }
-
-    getActiveSessionFromTimeUp() {
-        const timeUpDevice = document.getElementById('timeUpDevice').textContent;
-        const device = this.devices.find(d => d.name === timeUpDevice);
-        return device ? this.sessions.find(s => s.device_id === device.id && s.is_active) : null;
-    }
 
     // دالة مساعدة لتحويل النصوص العربية إلى UTF-8
     convertToUTF8(text) {
@@ -1242,7 +1758,7 @@ class GamingCenterManager {
     // تصدير التقرير إلى HTML مع دعم كامل للعربية
     exportToHTML() {
         if (!this.currentReportData) {
-            alert('لا توجد بيانات تقرير للتصدير');
+            toast.warning('لا توجد بيانات تقرير للتصدير');
             return;
         }
 
@@ -1477,7 +1993,7 @@ class GamingCenterManager {
 
     exportToPDF() {
         if (!this.currentReportData) {
-            alert('لا توجد بيانات تقرير للتصدير');
+            toast.warning('لا توجد بيانات تقرير للتصدير');
             return;
         }
 
@@ -1659,7 +2175,7 @@ class GamingCenterManager {
         const deviceName = document.getElementById('newDeviceName').value.trim();
         
         if (!deviceName) {
-            alert('يرجى إدخال اسم الجهاز');
+            toast.warning('يرجى إدخال اسم الجهاز');
             return;
         }
 
@@ -1679,13 +2195,13 @@ class GamingCenterManager {
                     document.getElementById('newDeviceName').value = '';
                     await this.loadData();
                     this.loadDevicesList();
-                    alert('تم إضافة الجهاز بنجاح');
+                    toast.success('تم إضافة الجهاز بنجاح');
                 } else {
-                    alert(result.message || 'فشل في إضافة الجهاز');
+                    toast.error(result.message || 'فشل في إضافة الجهاز');
                 }
             } catch (error) {
                 console.error('خطأ في إضافة الجهاز:', error);
-                alert('خطأ في الاتصال بالخادم');
+                toast.error('خطأ في الاتصال بالخادم');
             }
         } else {
             // إضافة محلية
@@ -1707,14 +2223,18 @@ class GamingCenterManager {
             
             this.loadDevicesList();
             this.saveLocalData();
-            alert('تم إضافة الجهاز بنجاح');
+            toast.success('تم إضافة الجهاز بنجاح');
         }
     }
 
     async deleteDevice(deviceId) {
-        if (!confirm('هل أنت متأكد من حذف هذا الجهاز؟')) {
-            return;
-        }
+        toast.confirm('هل أنت متأكد من حذف هذا الجهاز؟', 'تأكيد الحذف', 
+            () => this.performDeleteDevice(deviceId),
+            () => {}
+        );
+    }
+
+    async performDeleteDevice(deviceId) {
 
         if (this.isOnline) {
             try {
@@ -1731,13 +2251,13 @@ class GamingCenterManager {
                 if (result.success) {
                     await this.loadData();
                     this.loadDevicesList();
-                    alert('تم حذف الجهاز بنجاح');
+                    toast.success('تم حذف الجهاز بنجاح');
                 } else {
-                    alert(result.message || 'فشل في حذف الجهاز');
+                    toast.error(result.message || 'فشل في حذف الجهاز');
                 }
             } catch (error) {
                 console.error('خطأ في حذف الجهاز:', error);
-                alert('خطأ في الاتصال بالخادم');
+                toast.error('خطأ في الاتصال بالخادم');
             }
         } else {
             // حذف محلي
@@ -1754,9 +2274,9 @@ class GamingCenterManager {
                 
                 this.loadDevicesList();
                 this.saveLocalData();
-                alert('تم حذف الجهاز بنجاح');
+                toast.success('تم حذف الجهاز بنجاح');
             } else {
-                alert('لا يمكن حذف الجهاز لوجود جلسات نشطة');
+                toast.warning('لا يمكن حذف الجهاز لوجود جلسات نشطة');
             }
         }
     }
@@ -1803,7 +2323,7 @@ class GamingCenterManager {
         const newPrice = parseInt(priceInput.value);
         
         if (!newPrice || newPrice < 1000 || newPrice > 50000) {
-            alert('يرجى إدخال سعر صحيح بين 1000 و 50000 ليرة سورية');
+            toast.warning('يرجى إدخال سعر صحيح بين 1000 و 50000 ليرة سورية');
             return;
         }
 
@@ -1833,7 +2353,7 @@ class GamingCenterManager {
         // تحديث نصوص الأسعار في قائمة اختيار نمط اللعب
         this.updateGameModeOptions();
         
-        alert(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+        toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
     }
 
     updateGameModeOptions() {
@@ -1871,24 +2391,27 @@ class GamingCenterManager {
         const password = document.getElementById('clearReportsPassword').value;
         
         if (password !== this.adminPassword) {
-            alert('كلمة المرور غير صحيحة');
+            toast.error('كلمة المرور غير صحيحة');
             return;
         }
 
-        // تأكيد إضافي
-        const finalConfirm = confirm('هل أنت متأكد تماماً من حذف جميع التقارير المالية والجلسات السابقة؟\n\nهذه العملية لا يمكن التراجع عنها!');
-        
-        if (!finalConfirm) {
-            return;
-        }
+        // تنفيذ عملية المسح مباشرة بعد التحقق من كلمة المرور
+        this.performClearReports();
+    }
 
+    performClearReports() {
         // مسح جميع البيانات
         this.clearAllReports();
         
         // إخفاء النافذة
         this.hideClearReportsModal();
         
-        alert('تم مسح جميع التقارير المالية والجلسات السابقة بنجاح');
+        // إعادة تحميل البيانات وتحديث الواجهة
+        this.loadData();
+        this.updateDevicesGrid();
+        this.updateStats();
+        
+        toast.success('تم مسح جميع التقارير المالية والجلسات السابقة بنجاح');
     }
 
     clearAllReports() {

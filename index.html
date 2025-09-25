@@ -148,28 +148,37 @@
         </div>
     </div>
 
-    <!-- نافذة انتهاء الوقت -->
-    <div id="timeUpModal" class="modal">
-        <div class="modal-content time-up-modal">
+    <!-- حاوية Toast للإشعارات -->
+    <div id="toastContainer" class="toast-container"></div>
+
+    <!-- نافذة تسجيل دخول الإدارة -->
+    <div id="adminLoginModal" class="modal">
+        <div class="modal-content admin-login-modal">
             <div class="modal-header">
-                <h3><i class="fas fa-exclamation-triangle"></i> انتهاء الوقت</h3>
+                <h3><i class="fas fa-shield-alt"></i> تسجيل دخول الإدارة</h3>
+                <button class="close-btn" id="closeAdminLoginModal">&times;</button>
             </div>
-            <div class="time-up-content">
-                <p>انتهى وقت اللعب على الجهاز <span id="timeUpDevice"></span></p>
-                <div class="time-up-actions">
-                    <button class="btn btn-danger" id="stopSession">
-                        <i class="fas fa-stop"></i>
-                        إيقاف الجلسة
-                    </button>
-                    <button class="btn btn-warning" id="extendTime">
-                        <i class="fas fa-clock"></i>
-                        تمديد الوقت
-                    </button>
-                    <button class="btn btn-success" id="switchToUnlimited">
-                        <i class="fas fa-infinity"></i>
-                        التحويل لوقت مفتوح
-                    </button>
-                </div>
+            <div class="modal-body">
+                <form id="adminLoginForm">
+                    <div class="form-group">
+                        <label for="adminPasswordInput">
+                            <i class="fas fa-lock"></i>
+                            كلمة مرور الإدارة
+                        </label>
+                        <input type="password" id="adminPasswordInput" required 
+                               placeholder="أدخل كلمة مرور الإدارة">
+                    </div>
+                    <div class="form-actions">
+                        <button type="button" class="btn btn-secondary" id="cancelAdminLogin">
+                            <i class="fas fa-times"></i>
+                            إلغاء
+                        </button>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-sign-in-alt"></i>
+                            تسجيل الدخول
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     </div>

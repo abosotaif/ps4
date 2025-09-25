@@ -48,6 +48,9 @@ switch($action) {
     case 'switch_to_unlimited':
         switchToUnlimited($pdo);
         break;
+    case 'update_session':
+        updateSession($pdo);
+        break;
     case 'add_device':
         addDevice($pdo);
         break;
@@ -210,6 +213,31 @@ function switchToUnlimited($pdo) {
             echo json_encode(['success' => true, 'message' => 'تم التحويل إلى وقت مفتوح']);
         } else {
             echo json_encode(['success' => false, 'message' => 'فشل في التحويل']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function updateSession($pdo) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $session_id = $input['session_id'] ?? 0;
+    $session_type = $input['session_type'] ?? 'limited';
+    $time_limit = $input['time_limit'] ?? null;
+    
+    try {
+        if ($session_type === 'unlimited') {
+            $stmt = $pdo->prepare("UPDATE sessions SET session_type = 'unlimited', time_limit = NULL WHERE id = ? AND is_active = TRUE");
+            $stmt->execute([$session_id]);
+        } else {
+            $stmt = $pdo->prepare("UPDATE sessions SET session_type = 'limited', time_limit = ? WHERE id = ? AND is_active = TRUE");
+            $stmt->execute([$time_limit, $session_id]);
+        }
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'تم تحديث الجلسة بنجاح']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'فشل في تحديث الجلسة']);
         }
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
