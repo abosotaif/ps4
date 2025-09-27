@@ -466,6 +466,7 @@ class GamingCenterManager {
         this.isUpdating = false; // متغير لمنع التحديثات المتداخلة
         this.adminPassword = '12'; // كلمة مرور الإدارة
         this.isAdminAuthenticated = false; // حالة المصادقة
+        this.deviceToDeleteId = null; // معرف الجهاز المراد حذفه
         
         this.initializeApp();
     }
@@ -586,6 +587,23 @@ class GamingCenterManager {
             this.confirmClearReports();
         });
 
+        // مستمعي أحداث نافذة تأكيد حذف الجهاز
+        document.getElementById('cancelDeleteDevice').addEventListener('click', () => {
+            this.hideDeleteDeviceModal();
+        });
+
+        document.getElementById('confirmDeleteDevice').addEventListener('click', () => {
+            this.confirmDeleteDevice();
+        });
+
+        // دعم Enter key في حقل كلمة مرور حذف الجهاز
+        document.getElementById('deleteDevicePassword').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.confirmDeleteDevice();
+            }
+        });
+
         // نافذة التقارير
         document.getElementById('closeReportsModal').addEventListener('click', () => {
             this.hideReportsModal();
@@ -614,6 +632,8 @@ class GamingCenterManager {
                     this.hideAdminLoginModal();
                 } else if (e.target.id === 'clearReportsModal') {
                     this.hideClearReportsModal();
+                } else if (e.target.id === 'deleteDeviceModal') {
+                    this.hideDeleteDeviceModal();
                 } else {
                     this.hideAllModals();
                 }
@@ -892,6 +912,8 @@ class GamingCenterManager {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.classList.remove('show');
         });
+        // إعادة تعيين متغيرات النوافذ
+        this.deviceToDeleteId = null;
     }
 
     showTimeUpToast(deviceName, sessionId) {
@@ -2228,13 +2250,72 @@ class GamingCenterManager {
     }
 
     async deleteDevice(deviceId) {
-        toast.confirm('هل أنت متأكد من حذف هذا الجهاز؟', 'تأكيد الحذف', 
-            () => this.performDeleteDevice(deviceId),
-            () => {}
-        );
+        // إظهار نافذة تأكيد حذف الجهاز
+        this.showDeleteDeviceModal(deviceId);
+    }
+
+    showDeleteDeviceModal(deviceId) {
+        // إخفاء نافذة الإدارة
+        this.hideDevicesModal();
+        
+        // العثور على الجهاز المحدد
+        const device = this.devices.find(d => d.id === deviceId);
+        if (!device) {
+            toast.error('الجهاز غير موجود');
+            return;
+        }
+        
+        // حفظ معرف الجهاز للاستخدام لاحقاً
+        this.deviceToDeleteId = deviceId;
+        
+        // تحديث اسم الجهاز في النافذة
+        document.getElementById('deviceToDeleteName').textContent = device.name;
+        
+        // إظهار نافذة تأكيد حذف الجهاز
+        document.getElementById('deleteDeviceModal').classList.add('show');
+        
+        // مسح حقل كلمة المرور
+        document.getElementById('deleteDevicePassword').value = '';
+        
+        // التركيز على حقل كلمة المرور
+        setTimeout(() => {
+            document.getElementById('deleteDevicePassword').focus();
+        }, 100);
+    }
+
+    hideDeleteDeviceModal() {
+        document.getElementById('deleteDeviceModal').classList.remove('show');
+        this.deviceToDeleteId = null;
+    }
+
+    confirmDeleteDevice() {
+        const password = document.getElementById('deleteDevicePassword').value;
+        
+        if (password !== this.adminPassword) {
+            toast.error('كلمة المرور غير صحيحة');
+            // إضافة تأثير اهتزاز للحقل
+            const passwordInput = document.getElementById('deleteDevicePassword');
+            passwordInput.classList.add('error');
+            passwordInput.style.animation = 'shake 0.5s ease-in-out';
+            
+            setTimeout(() => {
+                passwordInput.classList.remove('error');
+                passwordInput.style.animation = '';
+                passwordInput.focus();
+                passwordInput.select();
+            }, 500);
+            return;
+        }
+
+        // تنفيذ عملية الحذف مباشرة بعد التحقق من كلمة المرور
+        if (this.deviceToDeleteId) {
+            this.performDeleteDevice(this.deviceToDeleteId);
+        }
     }
 
     async performDeleteDevice(deviceId) {
+        // إخفاء نافذة التأكيد أولاً
+        this.hideDeleteDeviceModal();
 
         if (this.isOnline) {
             try {

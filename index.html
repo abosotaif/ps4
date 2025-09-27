@@ -305,6 +305,37 @@
         </div>
     </div>
 
+    <!-- نافذة تأكيد حذف الجهاز -->
+    <div id="deleteDeviceModal" class="modal">
+        <div class="modal-content delete-device-modal">
+            <div class="modal-header">
+                <h3><i class="fas fa-exclamation-triangle"></i> تأكيد حذف الجهاز</h3>
+            </div>
+            <div class="delete-device-content">
+                <div class="warning-message">
+                    <i class="fas fa-trash-alt"></i>
+                    <h4>تحذير!</h4>
+                    <p>أنت على وشك حذف الجهاز <strong id="deviceToDeleteName"></strong></p>
+                    <p><strong>هذه العملية لا يمكن التراجع عنها!</strong></p>
+                </div>
+                <div class="password-confirmation">
+                    <label for="deleteDevicePassword">أدخل كلمة مرور الإدارة للتأكيد:</label>
+                    <input type="password" id="deleteDevicePassword" placeholder="كلمة المرور">
+                </div>
+                <div class="delete-device-actions">
+                    <button class="btn btn-secondary" id="cancelDeleteDevice">
+                        <i class="fas fa-times"></i>
+                        إلغاء
+                    </button>
+                    <button class="btn btn-danger" id="confirmDeleteDevice">
+                        <i class="fas fa-trash-alt"></i>
+                        تأكيد الحذف
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script src="script_new.js"></script>
 </body>
 </html>

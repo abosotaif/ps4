@@ -1622,3 +1622,105 @@ body {
 [data-theme="dark"] .text-muted {
     color: #a0aec0;
 }
+
+/* أنماط نافذة تأكيد حذف الجهاز */
+.delete-device-modal {
+    max-width: 500px;
+}
+
+.delete-device-content {
+    padding: 20px 0;
+}
+
+.delete-device-content .warning-message {
+    text-align: center;
+    margin-bottom: 30px;
+    padding: 20px;
+    background: #fff5f5;
+    border-radius: 10px;
+    border: 2px solid #fc8181;
+}
+
+.delete-device-content .warning-message i {
+    font-size: 3rem;
+    color: #e53e3e;
+    margin-bottom: 15px;
+}
+
+.delete-device-content .warning-message h4 {
+    color: #c53030;
+    margin-bottom: 10px;
+    font-size: 1.3rem;
+}
+
+.delete-device-content .warning-message p {
+    color: #c53030;
+    margin-bottom: 8px;
+    font-weight: 500;
+}
+
+.delete-device-content .password-confirmation {
+    margin-bottom: 30px;
+}
+
+.delete-device-content .password-confirmation label {
+    display: block;
+    margin-bottom: 10px;
+    font-weight: 600;
+    color: #2d3748;
+}
+
+.delete-device-content .password-confirmation input {
+    width: 100%;
+    padding: 12px 15px;
+    border: 2px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 1rem;
+    transition: border-color 0.3s ease;
+}
+
+.delete-device-content .password-confirmation input:focus {
+    outline: none;
+    border-color: #667eea;
+}
+
+.delete-device-actions {
+    display: flex;
+    gap: 15px;
+    justify-content: center;
+}
+
+.delete-device-actions .btn {
+    min-width: 120px;
+    padding: 12px 20px;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+/* تحسينات للثيم الليلي */
+[data-theme="dark"] .delete-device-content .warning-message {
+    background: #4a1a1a;
+    border-color: #fc8181;
+}
+
+[data-theme="dark"] .delete-device-content .warning-message h4 {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .delete-device-content .warning-message p {
+    color: #fc8181;
+}
+
+[data-theme="dark"] .delete-device-content .password-confirmation label {
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .delete-device-content .password-confirmation input {
+    background: #4a5568;
+    border-color: #718096;
+    color: #e2e8f0;
+}
+
+[data-theme="dark"] .delete-device-content .password-confirmation input:focus {
+    border-color: #667eea;
+}
