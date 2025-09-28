@@ -467,6 +467,10 @@ class GamingCenterManager {
         this.adminPassword = '12'; // كلمة مرور الإدارة
         this.isAdminAuthenticated = false; // حالة المصادقة
         
+        // نظام تتبع الوقت المحسن
+        this.sessionTimeTrackers = new Map(); // تتبع الوقت لكل جلسة
+        this.timeExtensionHistory = new Map(); // تاريخ تمديدات الوقت
+        
         this.initializeApp();
     }
 
@@ -818,6 +822,16 @@ class GamingCenterManager {
                             console.log(`استخدام time_limit من الخادم للجلسة ${session.id}: ${serverTimeLimit} >= ${localTimeLimit}`);
                         }
                     }
+                    
+                    // تهيئة نظام التتبع للجلسات النشطة
+                    if (session.is_active) {
+                        this.initializeSessionTimeTracker(
+                            session.id, 
+                            session.start_time, 
+                            session.time_limit, 
+                            session.game_mode
+                        );
+                    }
                 });
             }
         } catch (error) {
@@ -1154,6 +1168,9 @@ class GamingCenterManager {
         this.sessions.push(session);
         device.status = 'occupied';
 
+        // تهيئة نظام التتبع الجديد
+        this.initializeSessionTimeTracker(session.id, session.start_time, timeLimit, gameMode);
+
         this.hideDeviceSessionModal();
         
         // تحديث البطاقة المحددة فقط بدلاً من إعادة رسم الصفحة
@@ -1297,10 +1314,10 @@ class GamingCenterManager {
         // إخفاء Toast انتهاء الوقت أولاً
         toast.hideTimeUpToast(sessionId);
         
-        const session = this.sessions.find(s => s.id === sessionId);
+                const session = this.sessions.find(s => s.id === sessionId);
         if (!session) return;
 
-        const device = this.devices.find(d => d.id === session.device_id);
+                    const device = this.devices.find(d => d.id === session.device_id);
         if (!device) return;
 
         // تحديث معلومات الجهاز واللاعب
@@ -1446,12 +1463,15 @@ class GamingCenterManager {
             return;
         }
 
-        // حفظ الوقت الأصلي
-        const originalTimeLimit = session.time_limit;
-        
-        try {
-            // تحديث الوقت محلياً
-            session.time_limit += additionalMinutes;
+            // حفظ الوقت الأصلي
+            const originalTimeLimit = session.time_limit;
+            
+            try {
+                // تحديث الوقت محلياً
+                session.time_limit += additionalMinutes;
+            
+            // تحديث نظام التتبع الجديد
+            this.extendSessionTimeTracker(sessionId, additionalMinutes);
             
             // إخفاء نافذة التمديد
             this.hideExtendTimeModal();
@@ -1465,26 +1485,38 @@ class GamingCenterManager {
             
             // إخفاء أي إشعارات انتهاء وقت سابقة
             toast.hideTimeUpToast(sessionId);
-            
-            // محاولة تحديث قاعدة البيانات
-            if (this.isOnline) {
+                
+                // محاولة تحديث قاعدة البيانات
+                if (this.isOnline) {
                 const updateSuccess = await this.updateSessionTimeLimit(sessionId, session.time_limit);
                 if (!updateSuccess) {
                     // في حالة فشل التحديث، نعيد القيمة الأصلية
                     session.time_limit = originalTimeLimit;
-                    this.updateDevicesGrid();
+                    // إعادة تعيين التتبع
+                    const tracker = this.sessionTimeTrackers.get(sessionId);
+                    if (tracker) {
+                        tracker.currentTimeLimit = originalTimeLimit;
+                        tracker.extensions.pop(); // إزالة آخر تمديد
+                    }
+                this.updateDevicesGrid();
                     this.updateStats();
                     toast.error('فشل في حفظ التمديد في قاعدة البيانات');
                     return;
                 }
             }
-            
-        } catch (error) {
-            // في حالة فشل التحديث، إعادة الوقت الأصلي
-            session.time_limit = originalTimeLimit;
+                
+            } catch (error) {
+                // في حالة فشل التحديث، إعادة الوقت الأصلي
+                session.time_limit = originalTimeLimit;
+            // إعادة تعيين التتبع
+            const tracker = this.sessionTimeTrackers.get(sessionId);
+            if (tracker) {
+                tracker.currentTimeLimit = originalTimeLimit;
+                tracker.extensions.pop(); // إزالة آخر تمديد
+            }
             this.updateDevicesGrid();
             this.updateStats();
-            console.error('فشل في تحديث الجلسة:', error);
+                console.error('فشل في تحديث الجلسة:', error);
             toast.error('فشل في تمديد الوقت');
         }
     }
@@ -1518,6 +1550,101 @@ class GamingCenterManager {
             toast.error('فشل في تحديث الجلسة');
             throw error; // إعادة رمي الخطأ للتعامل معه في الدالة المستدعية
         }
+    }
+
+    // نظام تتبع الوقت المحسن
+    initializeSessionTimeTracker(sessionId, startTime, timeLimit, gameMode) {
+        this.sessionTimeTrackers.set(sessionId, {
+            startTime: new Date(startTime),
+            originalTimeLimit: timeLimit,
+            currentTimeLimit: timeLimit,
+            gameMode: gameMode,
+            extensions: [],
+            lastUpdate: Date.now()
+        });
+        
+        // تهيئة تاريخ التمديدات
+        this.timeExtensionHistory.set(sessionId, []);
+    }
+
+    // حساب الوقت المار بدقة حسب نمط اللعب
+    calculateElapsedTime(sessionId) {
+        const tracker = this.sessionTimeTrackers.get(sessionId);
+        if (!tracker) return { minutes: 0, seconds: 0 };
+
+        const now = new Date();
+        const elapsedMs = now - tracker.startTime;
+        const elapsedSeconds = Math.floor(elapsedMs / 1000);
+        const minutes = Math.floor(elapsedSeconds / 60);
+        const seconds = elapsedSeconds % 60;
+
+        return { minutes, seconds };
+    }
+
+    // حساب الوقت المتبقي بدقة
+    calculateRemainingTime(sessionId) {
+        const tracker = this.sessionTimeTrackers.get(sessionId);
+        if (!tracker || tracker.currentTimeLimit === null) return null;
+
+        const elapsed = this.calculateElapsedTime(sessionId);
+        const totalElapsedMinutes = elapsed.minutes;
+        const remainingMinutes = Math.max(0, tracker.currentTimeLimit - totalElapsedMinutes);
+        
+        return {
+            minutes: remainingMinutes,
+            seconds: 60 - elapsed.seconds, // الوقت المتبقي في الدقيقة الحالية
+            totalSeconds: remainingMinutes * 60 + (60 - elapsed.seconds)
+        };
+    }
+
+    // تمديد الوقت مع تتبع دقيق
+    extendSessionTimeTracker(sessionId, additionalMinutes) {
+        const tracker = this.sessionTimeTrackers.get(sessionId);
+        if (!tracker) return false;
+
+        // تحديث الوقت المحدد الحالي
+        tracker.currentTimeLimit += additionalMinutes;
+        
+        // تسجيل التمديد
+        const extension = {
+            timestamp: new Date(),
+            additionalMinutes: additionalMinutes,
+            newTimeLimit: tracker.currentTimeLimit
+        };
+        
+        tracker.extensions.push(extension);
+        this.timeExtensionHistory.get(sessionId).push(extension);
+        
+        // تحديث آخر وقت تحديث
+        tracker.lastUpdate = Date.now();
+        
+        console.log(`تم تمديد الجلسة ${sessionId} بـ ${additionalMinutes} دقيقة. الوقت المحدد الجديد: ${tracker.currentTimeLimit} دقيقة`);
+        
+        return true;
+    }
+
+    // التحقق من انتهاء الوقت
+    isTimeUp(sessionId) {
+        const remaining = this.calculateRemainingTime(sessionId);
+        return remaining === null ? false : remaining.totalSeconds <= 0;
+    }
+
+    // الحصول على معلومات الوقت الكاملة للجلسة
+    getSessionTimeInfo(sessionId) {
+        const tracker = this.sessionTimeTrackers.get(sessionId);
+        if (!tracker) return null;
+
+        const elapsed = this.calculateElapsedTime(sessionId);
+        const remaining = this.calculateRemainingTime(sessionId);
+        
+        return {
+            elapsed,
+            remaining,
+            timeLimit: tracker.currentTimeLimit,
+            gameMode: tracker.gameMode,
+            extensions: tracker.extensions.length,
+            isTimeUp: this.isTimeUp(sessionId)
+        };
     }
 
     playTimeUpSound() {
@@ -1644,69 +1771,83 @@ class GamingCenterManager {
             // تحديث العدادات للجلسات النشطة
             this.sessions.forEach(session => {
                 if (session.is_active) {
-                    const startTime = new Date(session.start_time);
-                    const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
-                    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-                    const remainingSeconds = elapsedSeconds % 60;
+                    // استخدام النظام الجديد لحساب الوقت
+                    const timeInfo = this.getSessionTimeInfo(session.id);
                     
-                    // تحديث الوقت المنقضي
-                    const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
-                    if (elapsedTimeElement) {
-                        const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
-                        if (elapsedTimeElement.textContent !== newTimeText) {
-                            elapsedTimeElement.textContent = newTimeText;
-                        }
-                    }
-                    
-                    // تحديث التكلفة الحالية
-                    const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
-                    if (costElement) {
-                        const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
-                        const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
-                        if (costElement.textContent !== newCostText) {
-                            costElement.textContent = newCostText;
-                        }
-                    }
-                        
-                    // تحديث الوقت المتبقي للجلسات المحددة
-                    if (session.session_type === 'limited') {
-                        // التأكد من وجود time_limit صحيح
-                        if (!session.time_limit || session.time_limit <= 0) {
-                            console.warn(`الجلسة ${session.id} لا تحتوي على time_limit صحيح:`, session.time_limit);
-                            return;
+                    if (timeInfo) {
+                        // تحديث الوقت المنقضي
+                        const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
+                        if (elapsedTimeElement) {
+                            const newTimeText = this.formatTimeWithSeconds(timeInfo.elapsed.minutes, timeInfo.elapsed.seconds);
+                            if (elapsedTimeElement.textContent !== newTimeText) {
+                                elapsedTimeElement.textContent = newTimeText;
+                            }
                         }
                         
-                        // حساب الوقت المتبقي بناءً على الوقت المحدد الحالي
-                        const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
-                        const timeRemainingElement = document.querySelector(`.time-remaining[data-session-id="${session.id}"]`);
-                        if (timeRemainingElement) {
-                            const newRemainingText = this.formatTimeWithSeconds(
-                                Math.floor(timeRemainingSeconds / 60), 
-                                timeRemainingSeconds % 60
-                            );
+                        // تحديث التكلفة الحالية
+                        const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
+                        if (costElement) {
+                            const currentCost = this.calculateCost(timeInfo.elapsed.minutes, timeInfo.gameMode);
+                            const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
+                            if (costElement.textContent !== newCostText) {
+                                costElement.textContent = newCostText;
+                            }
+                        }
                             
-                            if (timeRemainingElement.textContent !== newRemainingText) {
-                                timeRemainingElement.textContent = newRemainingText;
+                        // تحديث الوقت المتبقي للجلسات المحددة
+                        if (session.session_type === 'limited' && timeInfo.remaining) {
+                            const timeRemainingElement = document.querySelector(`.time-remaining[data-session-id="${session.id}"]`);
+                            if (timeRemainingElement) {
+                                const newRemainingText = this.formatTimeWithSeconds(
+                                    timeInfo.remaining.minutes, 
+                                    timeInfo.remaining.seconds
+                                );
+                                
+                                if (timeRemainingElement.textContent !== newRemainingText) {
+                                    timeRemainingElement.textContent = newRemainingText;
+                                }
+                                
+                                // تغيير لون النص عند اقتراب انتهاء الوقت
+                                timeRemainingElement.classList.remove('warning', 'danger');
+                                if (timeInfo.remaining.totalSeconds <= 300) { // 5 دقائق
+                                    timeRemainingElement.classList.add('warning');
+                                }
+                                if (timeInfo.remaining.totalSeconds <= 60) { // دقيقة واحدة
+                                    timeRemainingElement.classList.add('danger');
+                                }
                             }
                             
-                            // تغيير لون النص عند اقتراب انتهاء الوقت
-                            timeRemainingElement.classList.remove('warning', 'danger');
-                            if (timeRemainingSeconds <= 300) { // 5 دقائق
-                                timeRemainingElement.classList.add('warning');
+                            // فحص انتهاء الوقت وإظهار الإشعار
+                            if (timeInfo.isTimeUp && !toast.timeUpToasts.has(session.id)) {
+                                const device = this.devices.find(d => d.id === session.device_id);
+                                if (device) {
+                                    this.showTimeUpToast(device.name, session.id);
+                                }
                             }
-                            if (timeRemainingSeconds <= 60) { // دقيقة واحدة
-                                timeRemainingElement.classList.add('danger');
+                        }
+                    } else {
+                        // النظام القديم كبديل احتياطي
+                        const startTime = new Date(session.start_time);
+                        const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
+                        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+                        const remainingSeconds = elapsedSeconds % 60;
+                        
+                        // تحديث الوقت المنقضي
+                        const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
+                        if (elapsedTimeElement) {
+                            const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+                            if (elapsedTimeElement.textContent !== newTimeText) {
+                                elapsedTimeElement.textContent = newTimeText;
                             }
                         }
                         
-                        // فحص انتهاء الوقت وإظهار الإشعار (مع تحقق إضافي)
-                        // استخدام الوقت المحدد الحالي بدلاً من الوقت الأصلي
-                        if (elapsedMinutes >= session.time_limit && 
-                            session.session_type === 'limited' &&
-                            !toast.timeUpToasts.has(session.id)) {
-                            const device = this.devices.find(d => d.id === session.device_id);
-                            if (device) {
-                                this.showTimeUpToast(device.name, session.id);
+                        // تحديث التكلفة الحالية
+                        const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
+                        if (costElement) {
+                            const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
+                            const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
+                            if (costElement.textContent !== newCostText) {
+                                costElement.textContent = newCostText;
                             }
                         }
                     }
@@ -1769,29 +1910,50 @@ class GamingCenterManager {
         
         let sessionInfo = '';
         if (isOccupied) {
-            const startTime = new Date(session.start_time);
-            const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
-            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-            const remainingSeconds = elapsedSeconds % 60;
-            const elapsedTime = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
-            const cost = session.current_cost || this.calculateCost(elapsedMinutes, session.game_mode);
-            const gameModeText = session.game_mode === 'quad' ? `رباعي (${this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
+            // استخدام النظام الجديد لحساب الوقت
+            const timeInfo = this.getSessionTimeInfo(session.id);
             
-            // فحص انتهاء الوقت للجلسات المحددة
-            let timeRemainingText = '';
-            let timeUpClass = '';
-            if (session.session_type === 'limited') {
-                const timeRemaining = Math.max(0, session.time_limit - elapsedMinutes);
-                const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
-                timeRemainingText = `<p><strong>الوقت المتبقي:</strong> <span class="time-remaining" data-session-id="${session.id}">${this.formatTimeWithSeconds(Math.floor(timeRemainingSeconds / 60), timeRemainingSeconds % 60)}</span></p>`;
+            let elapsedTime, cost, timeRemainingText = '', timeUpClass = '';
+            
+            if (timeInfo) {
+                // استخدام النظام الجديد
+                elapsedTime = this.formatTimeWithSeconds(timeInfo.elapsed.minutes, timeInfo.elapsed.seconds);
+                cost = session.current_cost || this.calculateCost(timeInfo.elapsed.minutes, timeInfo.gameMode);
                 
-                // إضافة كلاس للتنبيه عند انتهاء الوقت
-                if (timeRemaining <= 0) {
-                    timeUpClass = 'time-up';
-                    // إظهار إشعار انتهاء الوقت
-                    this.showTimeUpToast(device.name, session.id);
+                if (session.session_type === 'limited' && timeInfo.remaining) {
+                    timeRemainingText = `<p><strong>الوقت المتبقي:</strong> <span class="time-remaining" data-session-id="${session.id}">${this.formatTimeWithSeconds(timeInfo.remaining.minutes, timeInfo.remaining.seconds)}</span></p>`;
+                    
+                    // إضافة كلاس للتنبيه عند انتهاء الوقت
+                    if (timeInfo.isTimeUp) {
+                        timeUpClass = 'time-up';
+                        // إظهار إشعار انتهاء الوقت
+                        this.showTimeUpToast(device.name, session.id);
+                    }
+                }
+            } else {
+                // النظام القديم كبديل احتياطي
+                const startTime = new Date(session.start_time);
+                const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
+                const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+                const remainingSeconds = elapsedSeconds % 60;
+                elapsedTime = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+                cost = session.current_cost || this.calculateCost(elapsedMinutes, session.game_mode);
+                
+                if (session.session_type === 'limited') {
+                    const timeRemaining = Math.max(0, session.time_limit - elapsedMinutes);
+                    const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
+                    timeRemainingText = `<p><strong>الوقت المتبقي:</strong> <span class="time-remaining" data-session-id="${session.id}">${this.formatTimeWithSeconds(Math.floor(timeRemainingSeconds / 60), timeRemainingSeconds % 60)}</span></p>`;
+                    
+                    // إضافة كلاس للتنبيه عند انتهاء الوقت
+                    if (timeRemaining <= 0) {
+                        timeUpClass = 'time-up';
+                        // إظهار إشعار انتهاء الوقت
+                        this.showTimeUpToast(device.name, session.id);
+                    }
                 }
             }
+            
+            const gameModeText = session.game_mode === 'quad' ? `رباعي (${this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
             
             sessionInfo = `
                 <div class="device-info">
@@ -2753,37 +2915,37 @@ class GamingCenterManager {
         
         try {
             // تحديث السعر محلياً
-            this.hourlyRates[gameMode] = newPrice;
-            
-            // حفظ الأسعار في التخزين المحلي
-            localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
-            
-            // تحديث الجلسات النشطة فقط (بدون تغيير الإيرادات السابقة)
-            this.sessions.forEach(session => {
-                if (session.is_active) {
-                    // إعادة حساب التكلفة للجلسات النشطة فقط
-                    const startTime = new Date(session.start_time);
-                    const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
-                    // تحديث التكلفة الحالية للجلسات النشطة فقط
-                    session.current_cost = this.calculateCost(elapsedMinutes, session.game_mode);
-                } else if (session.final_cost) {
-                    // للجلسات المنتهية، نستخدم التكلفة النهائية المحفوظة
-                    session.total_cost = session.final_cost;
-                }
-            });
-            
-            // تحديث واجهة المستخدم
-            this.updateUI();
-            
+        this.hourlyRates[gameMode] = newPrice;
+        
+        // حفظ الأسعار في التخزين المحلي
+        localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+        
+        // تحديث الجلسات النشطة فقط (بدون تغيير الإيرادات السابقة)
+        this.sessions.forEach(session => {
+            if (session.is_active) {
+                // إعادة حساب التكلفة للجلسات النشطة فقط
+                const startTime = new Date(session.start_time);
+                const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
+                // تحديث التكلفة الحالية للجلسات النشطة فقط
+                session.current_cost = this.calculateCost(elapsedMinutes, session.game_mode);
+            } else if (session.final_cost) {
+                // للجلسات المنتهية، نستخدم التكلفة النهائية المحفوظة
+                session.total_cost = session.final_cost;
+            }
+        });
+        
+        // تحديث واجهة المستخدم
+        this.updateUI();
+        
             // تحديث نصوص الأسعار في أزرار نمط اللعب
             this.updateGameModeButtons();
-            
+        
             // حفظ الأسعار في قاعدة البيانات
             if (this.isOnline) {
                 try {
                     const saveSuccess = await this.saveSettingsToDatabase();
                     if (saveSuccess) {
-                        toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+        toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
                     } else {
                         throw new Error('فشل في حفظ الأسعار في قاعدة البيانات');
                     }
