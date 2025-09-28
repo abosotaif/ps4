@@ -473,6 +473,7 @@ class GamingCenterManager {
     initializeApp() {
         this.loadTheme(); // تحميل الثيم المحفوظ
         this.setupEventListeners();
+        this.loadSavedPricing(); // تحميل الأسعار المحفوظة أولاً
         this.checkConnection();
         this.loadData();
     }
@@ -701,15 +702,58 @@ class GamingCenterManager {
         
         try {
             if (this.isOnline) {
+                // حفظ التعديلات المحلية قبل التحديث
+                this.saveLocalModifications();
+                
                 await this.loadDevices();
                 await this.loadActiveSessions();
                 await this.loadStats();
+                await this.loadSettings();
             } else {
                 this.loadLocalData();
             }
             this.updateUI();
         } finally {
             this.isUpdating = false;
+        }
+    }
+
+    // حفظ التعديلات المحلية على الجلسات
+    saveLocalModifications() {
+        if (!this.isOnline) return;
+        
+        try {
+            // حفظ تعديلات time_limit للجلسات المحددة
+            this.sessions.forEach(session => {
+                if (session.is_active && session.session_type === 'limited' && session.time_limit) {
+                    // تحديث time_limit في قاعدة البيانات
+                    this.updateSessionTimeLimit(session.id, session.time_limit);
+                }
+            });
+        } catch (error) {
+            console.error('خطأ في حفظ التعديلات المحلية:', error);
+        }
+    }
+
+    // تحديث time_limit في قاعدة البيانات
+    async updateSessionTimeLimit(sessionId, newTimeLimit) {
+        try {
+            const response = await fetch(`${this.apiUrl}?action=update_session_time_limit`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    session_id: sessionId, 
+                    time_limit: newTimeLimit 
+                })
+            });
+            
+            if (!response.ok) {
+                console.warn(`فشل في تحديث time_limit للجلسة ${sessionId}`);
+            }
+        } catch (error) {
+            console.error(`خطأ في تحديث time_limit للجلسة ${sessionId}:`, error);
         }
     }
 
@@ -729,7 +773,25 @@ class GamingCenterManager {
         try {
             const response = await fetch(`${this.apiUrl}?action=get_active_sessions`);
             if (response.ok) {
-                this.sessions = await response.json();
+                const newSessions = await response.json();
+                
+                // حفظ التعديلات المحلية على time_limit قبل التحديث
+                const localTimeLimitChanges = new Map();
+                this.sessions.forEach(session => {
+                    if (session.is_active && session.session_type === 'limited') {
+                        localTimeLimitChanges.set(session.id, session.time_limit);
+                    }
+                });
+                
+                // تحديث الجلسات
+                this.sessions = newSessions;
+                
+                // تطبيق التعديلات المحلية المحفوظة
+                this.sessions.forEach(session => {
+                    if (session.is_active && session.session_type === 'limited' && localTimeLimitChanges.has(session.id)) {
+                        session.time_limit = localTimeLimitChanges.get(session.id);
+                    }
+                });
             }
         } catch (error) {
             console.error('خطأ في تحميل الجلسات النشطة:', error);
@@ -746,6 +808,31 @@ class GamingCenterManager {
             }
         } catch (error) {
             console.error('خطأ في تحميل الإحصائيات:', error);
+        }
+    }
+
+    async loadSettings() {
+        try {
+            const response = await fetch(`${this.apiUrl}?action=get_settings`);
+            if (response.ok) {
+                const settings = await response.json();
+                
+                // تحديث الأسعار من قاعدة البيانات
+                if (settings.hourly_rate_duo) {
+                    this.hourlyRates.duo = parseInt(settings.hourly_rate_duo);
+                }
+                if (settings.hourly_rate_quad) {
+                    this.hourlyRates.quad = parseInt(settings.hourly_rate_quad);
+                }
+                
+                // حفظ الأسعار في التخزين المحلي
+                localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+                
+                // تحديث واجهة الإعدادات إذا كانت مفتوحة
+                this.loadPricingSettings();
+            }
+        } catch (error) {
+            console.error('خطأ في تحميل الإعدادات:', error);
         }
     }
 
@@ -1304,38 +1391,48 @@ class GamingCenterManager {
     // دالة لتمديد وقت الجلسة
     async extendSessionTime(sessionId, additionalMinutes) {
         const session = this.sessions.find(s => s.id === sessionId);
-        if (session) {
-            // حفظ الوقت الأصلي
-            const originalTimeLimit = session.time_limit;
+        if (!session) {
+            toast.error('الجلسة غير موجودة');
+            return;
+        }
+
+        if (session.session_type !== 'limited') {
+            toast.error('لا يمكن تمديد الوقت للجلسات المفتوحة');
+            return;
+        }
+
+        // حفظ الوقت الأصلي
+        const originalTimeLimit = session.time_limit;
+        
+        try {
+            // تحديث الوقت محلياً
+            session.time_limit += additionalMinutes;
             
-            try {
-                // تحديث الوقت محلياً
-                session.time_limit += additionalMinutes;
-                
-                // إخفاء نافذة التمديد
-                this.hideExtendTimeModal();
-                
-                // محاولة تحديث قاعدة البيانات
-                if (this.isOnline) {
-                    await this.updateSessionInDatabase(session);
-                }
-                
-                // تحديث واجهة المستخدم فوراً لمنع التصفير المفاجئ
-                this.updateDevicesGrid();
-                this.updateStats();
-                
-                // إظهار رسالة النجاح
-                toast.success(`تم تمديد الوقت بـ ${additionalMinutes} دقيقة`);
-                
-                // إخفاء أي إشعارات انتهاء وقت سابقة
-                toast.hideTimeUpToast(sessionId);
-                
-            } catch (error) {
-                // في حالة فشل التحديث، إعادة الوقت الأصلي
-                session.time_limit = originalTimeLimit;
-                console.error('فشل في تحديث الجلسة:', error);
-                toast.error('فشل في تمديد الوقت');
+            // إخفاء نافذة التمديد
+            this.hideExtendTimeModal();
+            
+            // تحديث واجهة المستخدم فوراً لمنع التصفير المفاجئ
+            this.updateDevicesGrid();
+            this.updateStats();
+            
+            // إظهار رسالة النجاح
+            toast.success(`تم تمديد الوقت بـ ${additionalMinutes} دقيقة`);
+            
+            // إخفاء أي إشعارات انتهاء وقت سابقة
+            toast.hideTimeUpToast(sessionId);
+            
+            // محاولة تحديث قاعدة البيانات
+            if (this.isOnline) {
+                await this.updateSessionTimeLimit(sessionId, session.time_limit);
             }
+            
+        } catch (error) {
+            // في حالة فشل التحديث، إعادة الوقت الأصلي
+            session.time_limit = originalTimeLimit;
+            this.updateDevicesGrid();
+            this.updateStats();
+            console.error('فشل في تحديث الجلسة:', error);
+            toast.error('فشل في تمديد الوقت');
         }
     }
 
@@ -1499,27 +1596,33 @@ class GamingCenterManager {
                     const elapsedMinutes = Math.floor(elapsedSeconds / 60);
                     const remainingSeconds = elapsedSeconds % 60;
                     
-                // تحديث الوقت المنقضي
-                const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
-                if (elapsedTimeElement) {
-                    const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
-                    if (elapsedTimeElement.textContent !== newTimeText) {
-                        elapsedTimeElement.textContent = newTimeText;
+                    // تحديث الوقت المنقضي
+                    const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
+                    if (elapsedTimeElement) {
+                        const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+                        if (elapsedTimeElement.textContent !== newTimeText) {
+                            elapsedTimeElement.textContent = newTimeText;
+                        }
                     }
-                }
-                
-                // تحديث التكلفة الحالية
-                const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
-                if (costElement) {
-                    const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
-                    const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
-                    if (costElement.textContent !== newCostText) {
-                        costElement.textContent = newCostText;
-                    }
-                }
                     
+                    // تحديث التكلفة الحالية
+                    const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
+                    if (costElement) {
+                        const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
+                        const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
+                        if (costElement.textContent !== newCostText) {
+                            costElement.textContent = newCostText;
+                        }
+                    }
+                        
                     // تحديث الوقت المتبقي للجلسات المحددة
                     if (session.session_type === 'limited') {
+                        // التأكد من وجود time_limit صحيح
+                        if (!session.time_limit || session.time_limit <= 0) {
+                            console.warn(`الجلسة ${session.id} لا تحتوي على time_limit صحيح:`, session.time_limit);
+                            return;
+                        }
+                        
                         // حساب الوقت المتبقي بناءً على الوقت المحدد الحالي
                         const timeRemainingSeconds = Math.max(0, (session.time_limit * 60) - elapsedSeconds);
                         const timeRemainingElement = document.querySelector(`.time-remaining[data-session-id="${session.id}"]`);
@@ -2583,7 +2686,7 @@ class GamingCenterManager {
         this.updateGameModeButtons();
     }
 
-    updatePricing(gameMode) {
+    async updatePricing(gameMode) {
         const priceInput = document.getElementById(`${gameMode}Price`);
         const newPrice = parseInt(priceInput.value);
         
@@ -2592,7 +2695,7 @@ class GamingCenterManager {
             return;
         }
 
-        // تحديث السعر
+        // تحديث السعر محلياً
         this.hourlyRates[gameMode] = newPrice;
         
         // حفظ الأسعار في التخزين المحلي
@@ -2618,7 +2721,42 @@ class GamingCenterManager {
         // تحديث نصوص الأسعار في أزرار نمط اللعب
         this.updateGameModeButtons();
         
-        toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+        // حفظ الأسعار في قاعدة البيانات
+        if (this.isOnline) {
+            try {
+                await this.saveSettingsToDatabase();
+                toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+            } catch (error) {
+                console.error('خطأ في حفظ الأسعار في قاعدة البيانات:', error);
+                toast.warning(`تم تحديث السعر محلياً، لكن فشل في حفظه في قاعدة البيانات`);
+            }
+        } else {
+            toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+        }
+    }
+
+    async saveSettingsToDatabase() {
+        try {
+            const response = await fetch(`${this.apiUrl}?action=update_settings`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    hourly_rate_duo: this.hourlyRates.duo,
+                    hourly_rate_quad: this.hourlyRates.quad
+                })
+            });
+            
+            const result = await response.json();
+            
+            if (!result.success) {
+                throw new Error(result.message || 'فشل في حفظ الإعدادات');
+            }
+        } catch (error) {
+            console.error('خطأ في حفظ الإعدادات:', error);
+            throw error;
+        }
     }
 
     updateGameModeButtons() {

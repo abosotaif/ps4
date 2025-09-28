@@ -48,6 +48,15 @@ switch($action) {
     case 'switch_to_unlimited':
         switchToUnlimited($pdo);
         break;
+    case 'update_session_time_limit':
+        updateSessionTimeLimit($pdo);
+        break;
+    case 'get_settings':
+        getSettings($pdo);
+        break;
+    case 'update_settings':
+        updateSettings($pdo);
+        break;
     case 'update_session':
         updateSession($pdo);
         break;
@@ -287,6 +296,61 @@ function deleteDevice($pdo) {
             'message' => $result['message']
         ]);
     } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function updateSessionTimeLimit($pdo) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    $session_id = $input['session_id'] ?? 0;
+    $time_limit = $input['time_limit'] ?? 0;
+    
+    try {
+        $stmt = $pdo->prepare("UPDATE sessions SET time_limit = ? WHERE id = ? AND is_active = TRUE");
+        $stmt->execute([$time_limit, $session_id]);
+        
+        if ($stmt->rowCount() > 0) {
+            echo json_encode(['success' => true, 'message' => 'تم تحديث وقت الجلسة بنجاح']);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'فشل في تحديث وقت الجلسة']);
+        }
+    } catch (Exception $e) {
+        echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function getSettings($pdo) {
+    try {
+        $stmt = $pdo->query("SELECT setting_key, setting_value FROM settings");
+        $settings = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        
+        $result = [];
+        foreach ($settings as $setting) {
+            $result[$setting['setting_key']] = $setting['setting_value'];
+        }
+        
+        echo json_encode($result);
+    } catch (Exception $e) {
+        echo json_encode(['error' => 'خطأ: ' . $e->getMessage()]);
+    }
+}
+
+function updateSettings($pdo) {
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    try {
+        $pdo->beginTransaction();
+        
+        foreach ($input as $key => $value) {
+            $stmt = $pdo->prepare("INSERT INTO settings (setting_key, setting_value) VALUES (?, ?) 
+                                  ON DUPLICATE KEY UPDATE setting_value = ?");
+            $stmt->execute([$key, $value, $value]);
+        }
+        
+        $pdo->commit();
+        echo json_encode(['success' => true, 'message' => 'تم تحديث الإعدادات بنجاح']);
+    } catch (Exception $e) {
+        $pdo->rollBack();
         echo json_encode(['success' => false, 'message' => 'خطأ: ' . $e->getMessage()]);
     }
 }
