@@ -703,7 +703,7 @@ class GamingCenterManager {
         try {
             if (this.isOnline) {
                 // حفظ التعديلات المحلية قبل التحديث
-                this.saveLocalModifications();
+                await this.saveLocalModifications();
                 
                 await this.loadDevices();
                 await this.loadActiveSessions();
@@ -719,17 +719,23 @@ class GamingCenterManager {
     }
 
     // حفظ التعديلات المحلية على الجلسات
-    saveLocalModifications() {
+    async saveLocalModifications() {
         if (!this.isOnline) return;
         
         try {
             // حفظ تعديلات time_limit للجلسات المحددة
+            const updatePromises = [];
             this.sessions.forEach(session => {
                 if (session.is_active && session.session_type === 'limited' && session.time_limit) {
                     // تحديث time_limit في قاعدة البيانات
-                    this.updateSessionTimeLimit(session.id, session.time_limit);
+                    updatePromises.push(this.updateSessionTimeLimit(session.id, session.time_limit));
                 }
             });
+            
+            // انتظار اكتمال جميع التحديثات
+            if (updatePromises.length > 0) {
+                await Promise.all(updatePromises);
+            }
         } catch (error) {
             console.error('خطأ في حفظ التعديلات المحلية:', error);
         }
@@ -749,11 +755,22 @@ class GamingCenterManager {
                 })
             });
             
-            if (!response.ok) {
-                console.warn(`فشل في تحديث time_limit للجلسة ${sessionId}`);
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    console.log(`تم تحديث time_limit للجلسة ${sessionId} بنجاح`);
+                    return true;
+                } else {
+                    console.warn(`فشل في تحديث time_limit للجلسة ${sessionId}:`, result.message);
+                    return false;
+                }
+            } else {
+                console.warn(`فشل في تحديث time_limit للجلسة ${sessionId}: HTTP ${response.status}`);
+                return false;
             }
         } catch (error) {
             console.error(`خطأ في تحديث time_limit للجلسة ${sessionId}:`, error);
+            return false;
         }
     }
 
@@ -786,10 +803,20 @@ class GamingCenterManager {
                 // تحديث الجلسات
                 this.sessions = newSessions;
                 
-                // تطبيق التعديلات المحلية المحفوظة
+                // تطبيق التعديلات المحلية المحفوظة مع التحقق من التزامن
                 this.sessions.forEach(session => {
                     if (session.is_active && session.session_type === 'limited' && localTimeLimitChanges.has(session.id)) {
-                        session.time_limit = localTimeLimitChanges.get(session.id);
+                        const localTimeLimit = localTimeLimitChanges.get(session.id);
+                        const serverTimeLimit = session.time_limit;
+                        
+                        // إذا كان الوقت المحلي أكبر من الخادم، نستخدم المحلي
+                        if (localTimeLimit > serverTimeLimit) {
+                            console.log(`استخدام time_limit المحلي للجلسة ${session.id}: ${localTimeLimit} > ${serverTimeLimit}`);
+                            session.time_limit = localTimeLimit;
+                        } else {
+                            // إذا كان الوقت المحلي أصغر أو مساوي، نستخدم الخادم
+                            console.log(`استخدام time_limit من الخادم للجلسة ${session.id}: ${serverTimeLimit} >= ${localTimeLimit}`);
+                        }
                     }
                 });
             }
@@ -817,12 +844,30 @@ class GamingCenterManager {
             if (response.ok) {
                 const settings = await response.json();
                 
-                // تحديث الأسعار من قاعدة البيانات
+                // حفظ الأسعار الحالية قبل التحديث
+                const currentDuoRate = this.hourlyRates.duo;
+                const currentQuadRate = this.hourlyRates.quad;
+                
+                // تحديث الأسعار من قاعدة البيانات مع التحقق من التزامن
                 if (settings.hourly_rate_duo) {
-                    this.hourlyRates.duo = parseInt(settings.hourly_rate_duo);
+                    const serverDuoRate = parseInt(settings.hourly_rate_duo);
+                    // استخدام السعر الأكبر بين المحلي والخادم
+                    if (serverDuoRate > currentDuoRate) {
+                        console.log(`تحديث سعر الزوجي من الخادم: ${serverDuoRate} > ${currentDuoRate}`);
+                        this.hourlyRates.duo = serverDuoRate;
+                    } else {
+                        console.log(`الاحتفاظ بسعر الزوجي المحلي: ${currentDuoRate} >= ${serverDuoRate}`);
+                    }
                 }
                 if (settings.hourly_rate_quad) {
-                    this.hourlyRates.quad = parseInt(settings.hourly_rate_quad);
+                    const serverQuadRate = parseInt(settings.hourly_rate_quad);
+                    // استخدام السعر الأكبر بين المحلي والخادم
+                    if (serverQuadRate > currentQuadRate) {
+                        console.log(`تحديث سعر الرباعي من الخادم: ${serverQuadRate} > ${currentQuadRate}`);
+                        this.hourlyRates.quad = serverQuadRate;
+                    } else {
+                        console.log(`الاحتفاظ بسعر الرباعي المحلي: ${currentQuadRate} >= ${serverQuadRate}`);
+                    }
                 }
                 
                 // حفظ الأسعار في التخزين المحلي
@@ -1423,7 +1468,15 @@ class GamingCenterManager {
             
             // محاولة تحديث قاعدة البيانات
             if (this.isOnline) {
-                await this.updateSessionTimeLimit(sessionId, session.time_limit);
+                const updateSuccess = await this.updateSessionTimeLimit(sessionId, session.time_limit);
+                if (!updateSuccess) {
+                    // في حالة فشل التحديث، نعيد القيمة الأصلية
+                    session.time_limit = originalTimeLimit;
+                    this.updateDevicesGrid();
+                    this.updateStats();
+                    toast.error('فشل في حفظ التمديد في قاعدة البيانات');
+                    return;
+                }
             }
             
         } catch (error) {
@@ -2695,43 +2748,65 @@ class GamingCenterManager {
             return;
         }
 
-        // تحديث السعر محلياً
-        this.hourlyRates[gameMode] = newPrice;
+        // حفظ السعر الأصلي للاسترداد في حالة الفشل
+        const originalPrice = this.hourlyRates[gameMode];
         
-        // حفظ الأسعار في التخزين المحلي
-        localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
-        
-        // تحديث الجلسات النشطة فقط (بدون تغيير الإيرادات السابقة)
-        this.sessions.forEach(session => {
-            if (session.is_active) {
-                // إعادة حساب التكلفة للجلسات النشطة فقط
-                const startTime = new Date(session.start_time);
-                const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
-                // تحديث التكلفة الحالية للجلسات النشطة فقط
-                session.current_cost = this.calculateCost(elapsedMinutes, session.game_mode);
-            } else if (session.final_cost) {
-                // للجلسات المنتهية، نستخدم التكلفة النهائية المحفوظة
-                session.total_cost = session.final_cost;
-            }
-        });
-        
-        // تحديث واجهة المستخدم
-        this.updateUI();
-        
-        // تحديث نصوص الأسعار في أزرار نمط اللعب
-        this.updateGameModeButtons();
-        
-        // حفظ الأسعار في قاعدة البيانات
-        if (this.isOnline) {
-            try {
-                await this.saveSettingsToDatabase();
+        try {
+            // تحديث السعر محلياً
+            this.hourlyRates[gameMode] = newPrice;
+            
+            // حفظ الأسعار في التخزين المحلي
+            localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+            
+            // تحديث الجلسات النشطة فقط (بدون تغيير الإيرادات السابقة)
+            this.sessions.forEach(session => {
+                if (session.is_active) {
+                    // إعادة حساب التكلفة للجلسات النشطة فقط
+                    const startTime = new Date(session.start_time);
+                    const elapsedMinutes = Math.floor((new Date() - startTime) / (1000 * 60));
+                    // تحديث التكلفة الحالية للجلسات النشطة فقط
+                    session.current_cost = this.calculateCost(elapsedMinutes, session.game_mode);
+                } else if (session.final_cost) {
+                    // للجلسات المنتهية، نستخدم التكلفة النهائية المحفوظة
+                    session.total_cost = session.final_cost;
+                }
+            });
+            
+            // تحديث واجهة المستخدم
+            this.updateUI();
+            
+            // تحديث نصوص الأسعار في أزرار نمط اللعب
+            this.updateGameModeButtons();
+            
+            // حفظ الأسعار في قاعدة البيانات
+            if (this.isOnline) {
+                try {
+                    const saveSuccess = await this.saveSettingsToDatabase();
+                    if (saveSuccess) {
+                        toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+                    } else {
+                        throw new Error('فشل في حفظ الأسعار في قاعدة البيانات');
+                    }
+                } catch (error) {
+                    // في حالة فشل الحفظ، نعيد السعر الأصلي
+                    this.hourlyRates[gameMode] = originalPrice;
+                    localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+                    this.updateUI();
+                    this.updateGameModeButtons();
+                    console.error('خطأ في حفظ الأسعار في قاعدة البيانات:', error);
+                    toast.error(`فشل في حفظ السعر الجديد، تم إعادة السعر الأصلي`);
+                }
+            } else {
                 toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
-            } catch (error) {
-                console.error('خطأ في حفظ الأسعار في قاعدة البيانات:', error);
-                toast.warning(`تم تحديث السعر محلياً، لكن فشل في حفظه في قاعدة البيانات`);
             }
-        } else {
-            toast.success(`تم تحديث سعر النمط ${gameMode === 'duo' ? 'الزوجي' : 'الرباعي'} إلى ${newPrice} ليرة سورية`);
+        } catch (error) {
+            // في حالة أي خطأ، نعيد السعر الأصلي
+            this.hourlyRates[gameMode] = originalPrice;
+            localStorage.setItem('gamingCenterPricing', JSON.stringify(this.hourlyRates));
+            this.updateUI();
+            this.updateGameModeButtons();
+            console.error('خطأ في تحديث السعر:', error);
+            toast.error('فشل في تحديث السعر');
         }
     }
 
@@ -2748,14 +2823,22 @@ class GamingCenterManager {
                 })
             });
             
-            const result = await response.json();
-            
-            if (!result.success) {
-                throw new Error(result.message || 'فشل في حفظ الإعدادات');
+            if (response.ok) {
+                const result = await response.json();
+                if (result.success) {
+                    console.log('تم حفظ الأسعار في قاعدة البيانات بنجاح');
+                    return true;
+                } else {
+                    console.warn('فشل في حفظ الأسعار في قاعدة البيانات:', result.message);
+                    return false;
+                }
+            } else {
+                console.warn('فشل في حفظ الأسعار في قاعدة البيانات: HTTP', response.status);
+                return false;
             }
         } catch (error) {
             console.error('خطأ في حفظ الإعدادات:', error);
-            throw error;
+            return false;
         }
     }
 
