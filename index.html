@@ -53,10 +53,6 @@
                     <i class="fas fa-cogs"></i>
                     إدارة
                 </button>
-                <button id="addSessionBtn" class="btn btn-primary">
-                    <i class="fas fa-plus"></i>
-                    بدء جلسة جديدة
-                </button>
                 <button id="viewReportsBtn" class="btn btn-secondary">
                     <i class="fas fa-chart-bar"></i>
                     التقارير
@@ -102,51 +98,6 @@
         </div>
     </div>
 
-    <!-- نافذة بدء الجلسة -->
-    <div id="sessionModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3>بدء جلسة جديدة</h3>
-                <button class="close-btn" id="closeSessionModal">&times;</button>
-            </div>
-            <form id="sessionForm">
-                <div class="form-group">
-                    <label for="deviceSelect">اختر الجهاز:</label>
-                    <select id="deviceSelect" required>
-                        <option value="">-- اختر الجهاز --</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="playerName">اسم اللاعب:</label>
-                    <input type="text" id="playerName" required>
-                </div>
-                <div class="form-group">
-                    <label for="gameMode">نمط اللعب:</label>
-                    <select id="gameMode" required>
-                        <option value="">-- اختر نمط اللعب --</option>
-                        <option value="duo">زوجي (6000 ل.س/ساعة)</option>
-                        <option value="quad">رباعي (8000 ل.س/ساعة)</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label for="sessionType">نوع الجلسة:</label>
-                    <select id="sessionType" required>
-                        <option value="">-- اختر نوع الجلسة --</option>
-                        <option value="unlimited">وقت مفتوح</option>
-                        <option value="limited">وقت محدد</option>
-                    </select>
-                </div>
-                <div class="form-group" id="timeLimitGroup" style="display: none;">
-                    <label for="timeLimit">مدة اللعب (دقيقة):</label>
-                    <input type="number" id="timeLimit" min="1" max="480">
-                </div>
-                <div class="form-actions">
-                    <button type="button" class="btn btn-secondary" id="cancelSession">إلغاء</button>
-                    <button type="submit" class="btn btn-primary">بدء الجلسة</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- حاوية Toast للإشعارات -->
     <div id="toastContainer" class="toast-container"></div>

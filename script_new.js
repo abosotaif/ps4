@@ -478,6 +478,111 @@ class GamingCenterManager {
         this.loadData();
     }
 
+    initSessionStartButtons() {
+        // استخدام event delegation لمعالجة الأزرار الديناميكية
+        document.addEventListener('click', (e) => {
+            // معالجة أزرار نمط اللعب
+            if (e.target.classList.contains('game-mode-btn')) {
+                this.handleGameModeSelection(e.target);
+            }
+            
+            // معالجة أزرار نوع الجلسة
+            if (e.target.classList.contains('session-type-btn')) {
+                this.handleSessionTypeSelection(e.target);
+            }
+            
+            // معالجة زر بدء الجلسة
+            if (e.target.classList.contains('start-session-btn')) {
+                this.handleStartSession(e.target);
+            }
+        });
+    }
+
+    handleGameModeSelection(button) {
+        const deviceId = button.dataset.deviceId;
+        const mode = button.dataset.mode;
+        
+        // إزالة التحديد من جميع أزرار نمط اللعب لهذا الجهاز
+        const allModeButtons = document.querySelectorAll(`.game-mode-btn[data-device-id="${deviceId}"]`);
+        allModeButtons.forEach(btn => btn.classList.remove('selected'));
+        
+        // تحديد الزر المحدد
+        button.classList.add('selected');
+        
+        // تحديث حالة زر بدء الجلسة
+        this.updateStartSessionButton(deviceId);
+    }
+
+    handleSessionTypeSelection(button) {
+        const deviceId = button.dataset.deviceId;
+        const type = button.dataset.type;
+        
+        // إزالة التحديد من جميع أزرار نوع الجلسة لهذا الجهاز
+        const allTypeButtons = document.querySelectorAll(`.session-type-btn[data-device-id="${deviceId}"]`);
+        allTypeButtons.forEach(btn => btn.classList.remove('selected'));
+        
+        // تحديد الزر المحدد
+        button.classList.add('selected');
+        
+        // إظهار/إخفاء حقل الوقت المحدد
+        const timeLimitInput = document.getElementById(`timeLimitInput-${deviceId}`);
+        if (type === 'limited') {
+            timeLimitInput.classList.add('show');
+        } else {
+            timeLimitInput.classList.remove('show');
+        }
+        
+        // تحديث حالة زر بدء الجلسة
+        this.updateStartSessionButton(deviceId);
+    }
+
+    updateStartSessionButton(deviceId) {
+        const startButton = document.querySelector(`.start-session-btn[data-device-id="${deviceId}"]`);
+        const selectedMode = document.querySelector(`.game-mode-btn.selected[data-device-id="${deviceId}"]`);
+        const selectedType = document.querySelector(`.session-type-btn.selected[data-device-id="${deviceId}"]`);
+        
+        if (selectedMode && selectedType) {
+            startButton.disabled = false;
+        } else {
+            startButton.disabled = true;
+        }
+    }
+
+    async handleStartSession(button) {
+        const deviceId = parseInt(button.dataset.deviceId);
+        const selectedMode = document.querySelector(`.game-mode-btn.selected[data-device-id="${deviceId}"]`);
+        const selectedType = document.querySelector(`.session-type-btn.selected[data-device-id="${deviceId}"]`);
+        
+        if (!selectedMode || !selectedType) {
+            toast.warning('يرجى اختيار نمط اللعب ونوع الجلسة');
+            return;
+        }
+        
+        const gameMode = selectedMode.dataset.mode;
+        const sessionType = selectedType.dataset.type;
+        let timeLimit = null;
+        
+        if (sessionType === 'limited') {
+            const timeLimitInput = document.getElementById(`timeLimit-${deviceId}`);
+            timeLimit = parseInt(timeLimitInput.value);
+            
+            if (!timeLimit || timeLimit <= 0) {
+                toast.warning('يرجى إدخال مدة صحيحة للوقت المحدد');
+                return;
+            }
+        }
+        
+        // طلب اسم اللاعب
+        const playerName = prompt('أدخل اسم اللاعب:');
+        if (!playerName || playerName.trim() === '') {
+            toast.warning('يرجى إدخال اسم اللاعب');
+            return;
+        }
+        
+        // بدء الجلسة
+        await this.startSession(deviceId, playerName.trim(), sessionType, timeLimit, gameMode);
+    }
+
     async checkConnection() {
         try {
             const response = await fetch(`${this.apiUrl}?action=get_stats`);
@@ -500,9 +605,6 @@ class GamingCenterManager {
             this.showDevicesModal();
         });
 
-        document.getElementById('addSessionBtn').addEventListener('click', () => {
-            this.showSessionModal();
-        });
 
         document.getElementById('viewReportsBtn').addEventListener('click', () => {
             this.showReportsModal();
@@ -512,25 +614,9 @@ class GamingCenterManager {
             this.handleLogout();
         });
 
-        // نافذة الجلسة
-        document.getElementById('closeSessionModal').addEventListener('click', () => {
-            this.hideSessionModal();
-        });
 
-        document.getElementById('cancelSession').addEventListener('click', () => {
-            this.hideSessionModal();
-        });
-
-        document.getElementById('sessionForm').addEventListener('submit', (e) => {
-            e.preventDefault();
-            this.startSession();
-        });
-
-        document.getElementById('sessionType').addEventListener('change', (e) => {
-            this.toggleTimeLimitInput(e.target.value);
-        });
-
-        // تم إزالة معالجات نافذة انتهاء الوقت - تم استبدالها بـ Toast
+        // معالجات الأزرار الجديدة لبدء الجلسة
+        this.initSessionStartButtons();
 
         // نافذة تسجيل دخول الإدارة
         document.getElementById('closeAdminLoginModal').addEventListener('click', () => {
@@ -828,15 +914,6 @@ class GamingCenterManager {
         this.updateUI();
     }
 
-    showSessionModal() {
-        this.populateDeviceSelect();
-        document.getElementById('sessionModal').classList.add('show');
-    }
-
-    hideSessionModal() {
-        document.getElementById('sessionModal').classList.remove('show');
-        this.resetSessionForm();
-    }
 
     showReportsModal() {
         document.getElementById('reportsModal').classList.add('show');
@@ -917,6 +994,12 @@ class GamingCenterManager {
     }
 
     showTimeUpToast(deviceName, sessionId) {
+        // التحقق من أن الجلسة لا تزال نشطة
+        const session = this.sessions.find(s => s.id === sessionId && s.is_active);
+        if (!session) {
+            return;
+        }
+        
         // استخدام النظام الجديد لإدارة إشعارات انتهاء الوقت
         const toastId = toast.showTimeUpToast(deviceName, sessionId);
         
@@ -1073,53 +1156,42 @@ class GamingCenterManager {
             oscillator.connect(gainNode);
             gainNode.connect(audioContext.destination);
             
+            // إنشاء نغمة تنبيه متعددة
             oscillator.frequency.setValueAtTime(800, audioContext.currentTime);
             oscillator.frequency.setValueAtTime(600, audioContext.currentTime + 0.1);
             oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.2);
+            oscillator.frequency.setValueAtTime(400, audioContext.currentTime + 0.3);
+            oscillator.frequency.setValueAtTime(800, audioContext.currentTime + 0.4);
             
-            gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+            gainNode.gain.setValueAtTime(0.2, audioContext.currentTime);
+            gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.6);
             
             oscillator.start(audioContext.currentTime);
-            oscillator.stop(audioContext.currentTime + 0.5);
+            oscillator.stop(audioContext.currentTime + 0.6);
         } catch (error) {
             console.log('لا يمكن تشغيل الصوت');
         }
     }
 
-    populateDeviceSelect() {
-        const select = document.getElementById('deviceSelect');
-        select.innerHTML = '<option value="">-- اختر الجهاز --</option>';
+    // دالة مساعدة لحساب الوقت المنقضي
+    calculateElapsedTime(startTime) {
+        const start = new Date(startTime);
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - start) / 1000);
+        const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+        const remainingSeconds = elapsedSeconds % 60;
         
-        this.devices.forEach(device => {
-            if (device.status === 'available') {
-                const option = document.createElement('option');
-                option.value = device.id;
-                option.textContent = device.name;
-                select.appendChild(option);
-            }
-        });
-        
-        // تحديث خيارات نمط اللعب
-        this.updateGameModeOptions();
+        return {
+            elapsedSeconds,
+            elapsedMinutes,
+            remainingSeconds
+        };
     }
 
-    toggleTimeLimitInput(sessionType) {
-        const timeLimitGroup = document.getElementById('timeLimitGroup');
-        if (sessionType === 'limited') {
-            timeLimitGroup.style.display = 'block';
-        } else {
-            timeLimitGroup.style.display = 'none';
-        }
-    }
 
-    async startSession() {
-        const deviceId = parseInt(document.getElementById('deviceSelect').value);
-        const playerName = document.getElementById('playerName').value;
-        const gameMode = document.getElementById('gameMode').value;
-        const sessionType = document.getElementById('sessionType').value;
-        const timeLimit = parseInt(document.getElementById('timeLimit').value) || null;
 
+    // دالة جديدة لبدء الجلسة مع المعاملات
+    async startSession(deviceId, playerName, sessionType, timeLimit, gameMode) {
         if (!deviceId || !playerName || !gameMode || !sessionType) {
             toast.warning('يرجى ملء جميع الحقول المطلوبة');
             return;
@@ -1149,7 +1221,6 @@ class GamingCenterManager {
                 const result = await response.json();
                 
                 if (result.success) {
-                    this.hideSessionModal();
                     await this.loadData();
                     toast.success(`تم بدء الجلسة بنجاح للاعب ${playerName}`);
                 } else {
@@ -1263,6 +1334,7 @@ class GamingCenterManager {
     }
 
     calculateCost(minutes, gameMode = 'duo') {
+        if (!minutes || minutes < 0) return 0;
         const hours = minutes / 60;
         const hourlyRate = this.hourlyRates[gameMode] || this.hourlyRates.duo;
         return Math.ceil(hours * hourlyRate);
@@ -1300,29 +1372,26 @@ class GamingCenterManager {
             // تحديث العدادات للجلسات النشطة
             this.sessions.forEach(session => {
                 if (session.is_active) {
-                    const startTime = new Date(session.start_time);
-                    const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
-                    const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-                    const remainingSeconds = elapsedSeconds % 60;
+                    const { elapsedSeconds, elapsedMinutes, remainingSeconds } = this.calculateElapsedTime(session.start_time);
                     
-                // تحديث الوقت المنقضي
-                const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
-                if (elapsedTimeElement) {
-                    const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
-                    if (elapsedTimeElement.textContent !== newTimeText) {
-                        elapsedTimeElement.textContent = newTimeText;
+                    // تحديث الوقت المنقضي
+                    const elapsedTimeElement = document.querySelector(`.elapsed-time[data-session-id="${session.id}"]`);
+                    if (elapsedTimeElement) {
+                        const newTimeText = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
+                        if (elapsedTimeElement.textContent !== newTimeText) {
+                            elapsedTimeElement.textContent = newTimeText;
+                        }
                     }
-                }
-                
-                // تحديث التكلفة الحالية
-                const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
-                if (costElement) {
-                    const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
-                    const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
-                    if (costElement.textContent !== newCostText) {
-                        costElement.textContent = newCostText;
+                    
+                    // تحديث التكلفة الحالية
+                    const costElement = document.querySelector(`.device-card[data-device-id="${session.device_id}"] .device-info p:last-child`);
+                    if (costElement) {
+                        const currentCost = this.calculateCost(elapsedMinutes, session.game_mode);
+                        const newCostText = `التكلفة الحالية: ${currentCost} ل.س`;
+                        if (costElement.textContent !== newCostText) {
+                            costElement.textContent = newCostText;
+                        }
                     }
-                }
                     
                     // تحديث الوقت المتبقي للجلسات المحددة
                     if (session.session_type === 'limited') {
@@ -1419,10 +1488,7 @@ class GamingCenterManager {
         
         let sessionInfo = '';
         if (isOccupied) {
-            const startTime = new Date(session.start_time);
-            const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
-            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
-            const remainingSeconds = elapsedSeconds % 60;
+            const { elapsedSeconds, elapsedMinutes, remainingSeconds } = this.calculateElapsedTime(session.start_time);
             const elapsedTime = this.formatTimeWithSeconds(elapsedMinutes, remainingSeconds);
             const cost = session.current_cost || this.calculateCost(elapsedMinutes, session.game_mode);
             const gameModeText = session.game_mode === 'quad' ? `رباعي (${this.hourlyRates.quad} ل.س/ساعة)` : `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
@@ -1467,10 +1533,45 @@ class GamingCenterManager {
                     <p><strong>إجمالي الإيرادات:</strong> ${(device.total_revenue || 0).toLocaleString()} ل.س</p>
                 </div>
                 <div class="device-actions">
-                    <button class="btn btn-primary" onclick="gamingCenter.showSessionModal()">
-                        <i class="fas fa-play"></i>
-                        بدء جلسة
-                    </button>
+                    <div class="session-start-buttons">
+                        <h4>بدء جلسة جديدة</h4>
+                        
+                        <!-- أزرار نمط اللعب -->
+                        <div class="game-mode-buttons">
+                            <button class="game-mode-btn" data-mode="duo" data-device-id="${device.id}">
+                                <i class="fas fa-users"></i>
+                                زوجي (${this.hourlyRates.duo} ل.س/ساعة)
+                            </button>
+                            <button class="game-mode-btn" data-mode="quad" data-device-id="${device.id}">
+                                <i class="fas fa-users"></i>
+                                رباعي (${this.hourlyRates.quad} ل.س/ساعة)
+                            </button>
+                        </div>
+                        
+                        <!-- أزرار نوع الجلسة -->
+                        <div class="session-type-buttons">
+                            <button class="session-type-btn" data-type="unlimited" data-device-id="${device.id}">
+                                <i class="fas fa-infinity"></i>
+                                وقت مفتوح
+                            </button>
+                            <button class="session-type-btn" data-type="limited" data-device-id="${device.id}">
+                                <i class="fas fa-clock"></i>
+                                وقت محدد
+                            </button>
+                        </div>
+                        
+                        <!-- حقل إدخال الوقت المحدد -->
+                        <div class="time-limit-input" id="timeLimitInput-${device.id}">
+                            <label for="timeLimit-${device.id}">مدة اللعب (دقيقة):</label>
+                            <input type="number" id="timeLimit-${device.id}" min="1" max="480" value="60">
+                        </div>
+                        
+                        <!-- زر بدء الجلسة -->
+                        <button class="start-session-btn" data-device-id="${device.id}" disabled>
+                            <i class="fas fa-play"></i>
+                            بدء الجلسة
+                        </button>
+                    </div>
                 </div>
             `;
         }
@@ -1487,14 +1588,15 @@ class GamingCenterManager {
 
         // إضافة كلاس التنبيه إذا انتهى الوقت
         if (isOccupied && session.session_type === 'limited') {
-            const startTime = new Date(session.start_time);
-            const elapsedSeconds = Math.floor((new Date() - startTime) / 1000);
-            const elapsedMinutes = Math.floor(elapsedSeconds / 60);
+            const { elapsedMinutes } = this.calculateElapsedTime(session.start_time);
             if (elapsedMinutes >= session.time_limit) {
                 card.classList.add('time-up');
             }
         }
 
+        // تحديث الأسعار في الأزرار
+        this.updateGameModeOptions();
+        
         return card;
     }
 
@@ -1566,24 +1668,20 @@ class GamingCenterManager {
     }
 
     formatTime(minutes) {
-        if (isNaN(minutes) || minutes < 0) return '0:00';
+        if (isNaN(minutes) || minutes < 0) minutes = 0;
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return `${hours}:${mins.toString().padStart(2, '0')}`;
     }
 
     formatTimeWithSeconds(minutes, seconds) {
-        if (isNaN(minutes) || minutes < 0) return '0:00:00';
+        if (isNaN(minutes) || minutes < 0) minutes = 0;
         if (isNaN(seconds) || seconds < 0) seconds = 0;
         const hours = Math.floor(minutes / 60);
         const mins = minutes % 60;
         return `${hours}:${mins.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
-    resetSessionForm() {
-        document.getElementById('sessionForm').reset();
-        document.getElementById('timeLimitGroup').style.display = 'none';
-    }
 
     setDefaultReportDate() {
         const today = new Date().toISOString().split('T')[0];
@@ -2438,19 +2536,17 @@ class GamingCenterManager {
     }
 
     updateGameModeOptions() {
-        // تحديث خيارات نمط اللعب في قائمة الاختيار
-        const gameModeSelect = document.getElementById('gameMode');
-        if (gameModeSelect) {
-            const duoOption = gameModeSelect.querySelector('option[value="duo"]');
-            const quadOption = gameModeSelect.querySelector('option[value="quad"]');
-            
-            if (duoOption) {
-                duoOption.textContent = `زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
-            }
-            if (quadOption) {
-                quadOption.textContent = `رباعي (${this.hourlyRates.quad} ل.س/ساعة)`;
-            }
-        }
+        // تحديث أسعار نمط اللعب في الأزرار الجديدة
+        const duoButtons = document.querySelectorAll('.game-mode-btn[data-mode="duo"]');
+        const quadButtons = document.querySelectorAll('.game-mode-btn[data-mode="quad"]');
+        
+        duoButtons.forEach(button => {
+            button.innerHTML = `<i class="fas fa-users"></i> زوجي (${this.hourlyRates.duo} ل.س/ساعة)`;
+        });
+        
+        quadButtons.forEach(button => {
+            button.innerHTML = `<i class="fas fa-users"></i> رباعي (${this.hourlyRates.quad} ل.س/ساعة)`;
+        });
     }
 
     showClearReportsModal() {
