@@ -53,6 +53,10 @@
                     <i class="fas fa-cogs"></i>
                     إدارة
                 </button>
+                <button id="addSessionBtn" class="btn btn-primary">
+                    <i class="fas fa-plus"></i>
+                    بدء جلسة جديدة
+                </button>
                 <button id="viewReportsBtn" class="btn btn-secondary">
                     <i class="fas fa-chart-bar"></i>
                     التقارير
@@ -98,133 +102,49 @@
         </div>
     </div>
 
-    <!-- نافذة بدء الجلسة للجهاز -->
-    <div id="deviceSessionModal" class="modal">
-        <div class="modal-content device-session-modal">
+    <!-- نافذة بدء الجلسة -->
+    <div id="sessionModal" class="modal">
+        <div class="modal-content">
             <div class="modal-header">
-                <h3 id="deviceSessionTitle">بدء جلسة جديدة</h3>
-                <button class="close-btn" id="closeDeviceSessionModal">&times;</button>
+                <h3>بدء جلسة جديدة</h3>
+                <button class="close-btn" id="closeSessionModal">&times;</button>
             </div>
-            <div class="device-session-content">
-                <div class="device-info-section">
-                    <div class="device-name-display">
-                        <i class="fas fa-gamepad"></i>
-                        <span id="selectedDeviceName">PS4 #1</span>
-                    </div>
+            <form id="sessionForm">
+                <div class="form-group">
+                    <label for="deviceSelect">اختر الجهاز:</label>
+                    <select id="deviceSelect" required>
+                        <option value="">-- اختر الجهاز --</option>
+                    </select>
                 </div>
-                
-                <form id="deviceSessionForm">
-                    <div class="form-group">
-                        <label for="playerNameInput">اسم اللاعب:</label>
-                        <input type="text" id="playerNameInput" required placeholder="أدخل اسم اللاعب">
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>نمط اللعب:</label>
-                        <div class="game-mode-buttons">
-                            <button type="button" class="game-mode-btn" data-mode="duo">
-                                <i class="fas fa-users"></i>
-                                <span>زوجي</span>
-                                <small id="duoPrice">6000 ل.س/ساعة</small>
-                            </button>
-                            <button type="button" class="game-mode-btn" data-mode="quad">
-                                <i class="fas fa-users"></i>
-                                <span>رباعي</span>
-                                <small id="quadPrice">8000 ل.س/ساعة</small>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label>نوع الجلسة:</label>
-                        <div class="session-type-buttons">
-                            <button type="button" class="session-type-btn" data-type="unlimited">
-                                <i class="fas fa-infinity"></i>
-                                <span>وقت مفتوح</span>
-                            </button>
-                            <button type="button" class="session-type-btn" data-type="limited">
-                                <i class="fas fa-clock"></i>
-                                <span>وقت محدد</span>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="form-group" id="timeLimitGroup" style="display: none;">
-                        <label for="timeLimitInput">مدة اللعب (دقيقة):</label>
-                        <input type="number" id="timeLimitInput" min="1" max="480" placeholder="أدخل المدة بالدقائق">
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" id="cancelDeviceSession">إلغاء</button>
-                        <button type="submit" class="btn btn-primary btn-large">
-                            <i class="fas fa-play"></i>
-                            بدء الجلسة
-                        </button>
-                    </div>
-                </form>
-            </div>
-        </div>
-    </div>
-
-    <!-- نافذة تمديد الوقت -->
-    <div id="extendTimeModal" class="modal">
-        <div class="modal-content extend-time-modal">
-            <div class="modal-header">
-                <h3><i class="fas fa-clock"></i> تمديد الوقت</h3>
-                <button class="close-btn" id="closeExtendTimeModal">&times;</button>
-            </div>
-            <div class="extend-time-content">
-                <div class="device-info-extend">
-                    <div class="device-name-extend">
-                        <i class="fas fa-gamepad"></i>
-                        <span id="extendDeviceName">PS4 #1</span>
-                    </div>
-                    <div class="player-info-extend">
-                        <i class="fas fa-user"></i>
-                        <span id="extendPlayerName">اسم اللاعب</span>
-                    </div>
+                <div class="form-group">
+                    <label for="playerName">اسم اللاعب:</label>
+                    <input type="text" id="playerName" required>
                 </div>
-                
-                <div class="time-info">
-                    <div class="current-time">
-                        <label>الوقت المنقضي:</label>
-                        <span id="currentElapsedTime">0:00:00</span>
-                    </div>
-                    <div class="remaining-time">
-                        <label>الوقت المتبقي:</label>
-                        <span id="currentRemainingTime">0:00:00</span>
-                    </div>
+                <div class="form-group">
+                    <label for="gameMode">نمط اللعب:</label>
+                    <select id="gameMode" required>
+                        <option value="">-- اختر نمط اللعب --</option>
+                        <option value="duo">زوجي (6000 ل.س/ساعة)</option>
+                        <option value="quad">رباعي (8000 ل.س/ساعة)</option>
+                    </select>
                 </div>
-                
-                <form id="extendTimeForm">
-                    <div class="form-group">
-                        <label for="extendTimeInput">كم دقيقة تريد إضافة؟</label>
-                        <div class="time-input-container">
-                            <input type="number" id="extendTimeInput" min="1" max="480" value="30" required>
-                            <span class="time-unit">دقيقة</span>
-                        </div>
-                        <div class="quick-time-buttons">
-                            <button type="button" class="quick-time-btn" data-minutes="15">15 دقيقة</button>
-                            <button type="button" class="quick-time-btn" data-minutes="30">30 دقيقة</button>
-                            <button type="button" class="quick-time-btn" data-minutes="60">ساعة واحدة</button>
-                            <button type="button" class="quick-time-btn" data-minutes="120">ساعتان</button>
-                        </div>
-                    </div>
-                    
-                    <div class="new-time-preview">
-                        <label>الوقت الجديد بعد التمديد:</label>
-                        <span id="newTotalTime">0:00:00</span>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-secondary" id="cancelExtendTime">إلغاء</button>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fas fa-plus"></i>
-                            تمديد الوقت
-                        </button>
-                    </div>
-                </form>
-            </div>
+                <div class="form-group">
+                    <label for="sessionType">نوع الجلسة:</label>
+                    <select id="sessionType" required>
+                        <option value="">-- اختر نوع الجلسة --</option>
+                        <option value="unlimited">وقت مفتوح</option>
+                        <option value="limited">وقت محدد</option>
+                    </select>
+                </div>
+                <div class="form-group" id="timeLimitGroup" style="display: none;">
+                    <label for="timeLimit">مدة اللعب (دقيقة):</label>
+                    <input type="number" id="timeLimit" min="1" max="480">
+                </div>
+                <div class="form-actions">
+                    <button type="button" class="btn btn-secondary" id="cancelSession">إلغاء</button>
+                    <button type="submit" class="btn btn-primary">بدء الجلسة</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -330,61 +250,6 @@
         </div>
     </div>
 
-    <!-- نافذة تأكيد حذف الجهاز -->
-    <div id="deleteDeviceModal" class="modal">
-        <div class="modal-content delete-device-modal">
-            <div class="modal-header">
-                <h3><i class="fas fa-exclamation-triangle"></i> تأكيد حذف الجهاز</h3>
-                <button class="close-btn" id="closeDeleteDeviceModal">&times;</button>
-            </div>
-            <div class="delete-device-content">
-                <div class="warning-message">
-                    <i class="fas fa-exclamation-triangle"></i>
-                    <h4>تحذير!</h4>
-                    <p>أنت على وشك حذف الجهاز <strong id="deviceToDeleteName">PS4 #1</strong> نهائياً.</p>
-                    <p><strong>هذه العملية لا يمكن التراجع عنها!</strong></p>
-                </div>
-                
-                <div class="device-info-delete">
-                    <div class="device-details">
-                        <div class="detail-item">
-                            <i class="fas fa-gamepad"></i>
-                            <span>اسم الجهاز: <strong id="deviceNameDelete">PS4 #1</strong></span>
-                        </div>
-                        <div class="detail-item">
-                            <i class="fas fa-clock"></i>
-                            <span>إجمالي وقت اللعب: <strong id="devicePlayTimeDelete">0:00</strong></span>
-                        </div>
-                        <div class="detail-item">
-                            <i class="fas fa-money-bill-wave"></i>
-                            <span>إجمالي الإيرادات: <strong id="deviceRevenueDelete">0 ل.س</strong></span>
-                        </div>
-                        <div class="detail-item">
-                            <i class="fas fa-info-circle"></i>
-                            <span>الحالة: <strong id="deviceStatusDelete">متاح</strong></span>
-                        </div>
-                    </div>
-                </div>
-                
-                <div class="password-confirmation">
-                    <label for="deleteDevicePassword">أدخل كلمة مرور الإدارة للتأكيد:</label>
-                    <input type="password" id="deleteDevicePassword" placeholder="كلمة المرور" required>
-                </div>
-                
-                <div class="delete-device-actions">
-                    <button class="btn btn-secondary" id="cancelDeleteDevice">
-                        <i class="fas fa-times"></i>
-                        إلغاء
-                    </button>
-                    <button class="btn btn-danger" id="confirmDeleteDevice">
-                        <i class="fas fa-trash-alt"></i>
-                        حذف الجهاز نهائياً
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- نافذة تأكيد مسح التقارير -->
     <div id="clearReportsModal" class="modal">
         <div class="modal-content clear-reports-modal">
@@ -440,6 +305,7 @@
         </div>
     </div>
 
+    <script src="timer-manager.js"></script>
     <script src="script_new.js"></script>
 </body>
 </html>
